@@ -17,12 +17,17 @@ import gym
 import gym_donkeycar
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import backend as K
+# from tensorflow.keras import backend as K
 from tensorflow.keras.layers import Activation, Conv2D, Dense, Flatten
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 
-EPISODES = 10000
+# logging
+# from stable_baselines import logger
+# from stable_baselines.common import explained_variance, tf_util, TensorboardWriter
+# from stable_baselines.common.tf_util import mse, total_episode_reward_logger
+import datetime
+
 img_rows, img_cols = 80, 80
 # Convert image into Black and white
 img_channels = 4  # We stack 4 frames
@@ -52,7 +57,7 @@ class DQNAgent:
         self.batch_size = 64
         self.train_start = 100
         self.explore = 10000
-
+        
         # Create replay memory using deque
         self.memory = deque(maxlen=10000)
 
@@ -202,6 +207,8 @@ def run_ddqn(args):
 #     config.gpu_options.allow_growth = True
 #     sess = tf.Session(config=config)
 #     K.set_session(sess)
+    
+    # only use one GPU
     gpu_id = args.gpu
     gpu_devices = tf.config.experimental.list_physical_devices('GPU')
     tf.config.experimental.set_visible_devices(gpu_devices[gpu_id], 'GPU')
@@ -214,6 +221,13 @@ def run_ddqn(args):
 #     b = tf.constant([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
 #     # Run on the GPU
 #     c = tf.matmul(a, b)
+
+    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    train_log_dir = 'logs/reward/train/' + current_time 
+    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+    
+    # number of episodes
+    EPISODES = args.eps 
     
     conf = {
         "exe_path": args.sim,
@@ -224,7 +238,7 @@ def run_ddqn(args):
         "car_name": "me",
         "font_size": 100,
         "racer_name": "DDQN",
-        "country": "USA",
+        "country": "SG",
         "bio": "Learning to drive w DDQN RL",
         "guid": str(uuid.uuid4()),
         "max_cte": 10,
@@ -246,6 +260,7 @@ def run_ddqn(args):
     # Get size of state and action from environment
     state_size = (img_rows, img_cols, img_channels)
     action_space = env.action_space  # Steering and Throttle
+    
 
     try:
         agent = DQNAgent(state_size, action_space, train=not args.test)
@@ -266,20 +281,24 @@ def run_ddqn(args):
             obs = env.reset()
 
             episode_len = 0
-
+            episode_total_reward = 0
+            
             x_t = agent.process_image(obs)
 
             s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
             # In Keras, need to reshape
             s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  # 1*80*80*4
-
+            
+            
             while not done:
 
                 # Get action for the current state and go one step in environment
                 steering = agent.get_action(s_t)
                 action = [steering, throttle]
                 next_obs, reward, done, info = env.step(action)
-
+                
+                episode_total_reward += reward
+                
                 x_t1 = agent.process_image(next_obs)
 
                 x_t1 = x_t1.reshape(1, x_t1.shape[0], x_t1.shape[1], 1)  # 1x80x80x1
@@ -332,6 +351,12 @@ def run_ddqn(args):
                         " episode length:",
                         episode_len,
                     )
+                    
+                    # Use writer to save the result
+                    with train_summary_writer.as_default():
+                        tf.summary.scalar('episode length', episode_len, step=e)
+                        tf.summary.scalar('episode total reward', episode_total_reward, step=e)
+                        tf.summary.scalar('episode average reward', episode_total_reward/episode_len, step=e)
 
     except KeyboardInterrupt:
         print("stopping run...")
@@ -368,8 +393,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--env_name", type=str, default="donkey-generated-roads-v0", help="name of donkey sim environment", choices=env_list
     )
-    parser.add_argument(
-        "--gpu", type=int, default=0, help="name of GPU to use")
+    parser.add_argument("--gpu", type=int, default=0, help="name of GPU to use")
+    parser.add_argument("--eps", type=int, default=10000, help="number of episodes to train for")
+#     parser.add_argument("--verbose", type=bool, default=0, help="verbose mode")
+
     args = parser.parse_args()
+    
 
     run_ddqn(args)
