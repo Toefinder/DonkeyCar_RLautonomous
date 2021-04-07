@@ -261,21 +261,16 @@ class DonkeyUnitySimHandler(IMesgHandler):
 
     def calc_reward(self, done):
         if done:
-#             return -1.0
-            return -5.0
+            return -1.0
 
         if self.cte > self.max_cte:
-#             return -1.0
-            return -5.0
+            return -1.0
 
         if self.hit != "none":
             return -2.0
 
         # going fast close to the center of lane yeilds best reward
-#         return (1.0 - (math.fabs(self.cte) / self.max_cte)) * self.speed
-        
-        # cte reward function
-        return 1.0 - (math.fabs(self.cte)/self.max_cte)
+        return (1.0 - (math.fabs(self.cte) / self.max_cte)) * self.speed
 
     # ------ Socket interface ----------- #
 
@@ -352,7 +347,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
     def determine_episode_over(self):
         # we have a few initial frames on start that are sometimes very large CTE when it's behind
         # the path just slightly. We ignore those.
-        if math.fabs(self.cte) > 2 * self.max_cte and  math.fabs(self.cte) < 10 * self.max_cte: 
+        if math.fabs(self.cte) > 2 * self.max_cte:
             pass
         elif math.fabs(self.cte) > self.max_cte:
             logger.debug(f"game over: cte {self.cte}")
@@ -386,10 +381,10 @@ class DonkeyUnitySimHandler(IMesgHandler):
             else:
                 raise ValueError(f"Scene name {self.SceneToLoad} not in scene list {names}")
 
-    def send_control(self, steer, throttle):
+    def send_control(self, steer, throttle, brake = 0.0):
         if not self.loaded:
             return
-        msg = {"msg_type": "control", "steering": steer.__str__(), "throttle": throttle.__str__(), "brake": "0.0"}
+        msg = {"msg_type": "control", "steering": steer.__str__(), "throttle": throttle.__str__(), "brake": "{}".format(brake)} 
         self.queue_message(msg)
 
     def send_reset_car(self):
