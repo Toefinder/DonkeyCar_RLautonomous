@@ -26,6 +26,7 @@ from tensorflow.keras.optimizers import Adam
 # from stable_baselines import logger
 # from stable_baselines.common import explained_variance, tf_util, TensorboardWriter
 # from stable_baselines.common.tf_util import mse, total_episode_reward_logger
+import math
 import datetime
 
 img_rows, img_cols = 80, 80
@@ -135,7 +136,9 @@ class DQNAgent:
         minibatch = random.sample(self.memory, batch_size)
 
         state_t, action_t, reward_t, state_t1, terminal = zip(*minibatch)
+        
         state_t = np.concatenate(state_t)
+#         print(state_t.shape) # debug
         state_t1 = np.concatenate(state_t1)
         targets = self.model.predict(state_t)
         self.max_Q = np.max(targets[0])
@@ -156,6 +159,9 @@ class DQNAgent:
     # Save the model which is under training
     def save_model(self, name):
         self.model.save_weights(name)
+
+    def save_ready_model(self, name):
+        self.model.save(name)
 
 
 # Utils Functions #
@@ -196,7 +202,41 @@ def linear_unbin(arr):
     a = b * (2 / 14) - 1
     return a
 
+def ep_over_fn(self):
+    # we have a few initial frames on start that are sometimes very large CTE when it's behind
+    # the path just slightly. We ignore those.
+    global DEBUG_MODE
+    if math.fabs(self.cte) > 2 * self.max_cte:
+        pass
+    elif self.cte > 1/2 * self.max_cte:
+        if DEBUG_MODE: print(f"game over stray too much right: cte {self.cte}")
+        self.over = True
+    elif self.cte < (-1) * self.max_cte:
+        if DEBUG_MODE: print(f"game over stray too much left: cte {self.cte}")
+        self.over = True
+    elif self.hit != "none":
+        if DEBUG_MODE: print(f"game over: hit {self.hit}")
+        self.over = True
+    elif self.missed_checkpoint:
+        if DEBUG_MODE: print("missed checkpoint")
+        self.over = True
+    elif self.dq:
+        if DEBUG_MODE: print("disqualified")
+        self.over = True
 
+def calc_reward(self, done):
+    if done:
+        return -5.0
+
+    if self.cte > self.max_cte:
+        return -5.0
+
+    if self.hit != "none":
+        return -2.0
+
+    # going fast close to the center of lane yields best reward
+    return 1.0 - (math.fabs(self.cte)/self.max_cte)
+        
 def run_ddqn(args):
     """
     run a DDQN training session, or test it's result, with the donkey simulator
@@ -228,7 +268,11 @@ def run_ddqn(args):
     
     # number of episodes
     EPISODES = args.eps 
-    
+    # debug mode
+    global DEBUG_MODE
+    DEBUG_MODE = args.debug_mode
+#     print(DEBUG_MODE) # debug
+
     conf = {
         "exe_path": args.sim,
         "host": "127.0.0.1",
@@ -246,7 +290,11 @@ def run_ddqn(args):
 
     # Construct gym environment. Starts the simulator if path is given.
     env = gym.make(args.env_name, conf=conf)
-
+    
+    # Set custom reward function and episode over function
+    env.set_episode_over_fn(ep_over_fn)
+    env.set_reward_fn(calc_reward)
+    
     # not working on windows...
     def signal_handler(signal, frame):
         print("catching ctrl+c")
@@ -282,6 +330,10 @@ def run_ddqn(args):
 
             episode_len = 0
             episode_total_reward = 0
+#             episode_all_speed = np.array([])
+#             episode_all_cte = np.array([])
+            episode_average_speed = 0
+            episode_average_cte = 0
             
             x_t = agent.process_image(obs)
 
@@ -297,7 +349,18 @@ def run_ddqn(args):
                 action = [steering, throttle]
                 next_obs, reward, done, info = env.step(action)
                 
+                if DEBUG_MODE and agent.t % 10 == 0: 
+                    print("CTE:{}".format(info["cte"])) # debug
+#                 print("Speed:{}".format(info["speed"])) # debug
+
+#                 if math.fabs(info["cte"]) > 100 and episode_len > 100:
+#                     print("Stray too far from the center") # debug
+#                     done = True
                 episode_total_reward += reward
+#                 episode_all_speed = np.append(episode_all_speed, np.array([info["speed"]]))
+#                 episode_all_cte = np.append(episode_all_cte, np.array([info["cte"]]))
+                episode_average_speed = (episode_average_speed * episode_len + info["speed"])/ (episode_len +1) 
+                episode_average_cte = (episode_average_cte * episode_len + info["cte"])/ (episode_len +1) 
                 
                 x_t1 = agent.process_image(next_obs)
 
@@ -330,6 +393,7 @@ def run_ddqn(args):
                         agent.max_Q,
                     )
 
+
                 if done:
 
                     # Every episode update the target model to be same with model
@@ -357,7 +421,12 @@ def run_ddqn(args):
                         tf.summary.scalar('episode length', episode_len, step=e)
                         tf.summary.scalar('episode total reward', episode_total_reward, step=e)
                         tf.summary.scalar('episode average reward', episode_total_reward/episode_len, step=e)
-
+#                         tf.summary.scalar('episode average speed verify', np.sum(episode_all_speed)/episode_len, step=e)
+#                         tf.summary.scalar('episode average cte verify', np.sum(episode_all_cte)/episode_len, step=e)
+                        tf.summary.scalar('episode average speed', episode_average_speed, step=e)
+                        tf.summary.scalar('episode average cte', episode_average_cte, step=e)
+        if agent.train:
+            agent.save_ready_model(args.model[:-3]+"_ready.h5")
     except KeyboardInterrupt:
         print("stopping run...")
     finally:
@@ -391,13 +460,17 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=9091, help="port to use for websockets")
     parser.add_argument("--throttle", type=float, default=0.3, help="constant throttle for driving")
     parser.add_argument(
-        "--env_name", type=str, default="donkey-generated-roads-v0", help="name of donkey sim environment", choices=env_list
+        "--env_name", type=str, default="donkey-generated-track-v0", help="name of donkey sim environment", choices=env_list
     )
     parser.add_argument("--gpu", type=int, default=0, help="name of GPU to use")
+    parser.add_argument("--debug_mode", type=int, default=0, help="debug mode")
     parser.add_argument("--eps", type=int, default=10000, help="number of episodes to train for")
-#     parser.add_argument("--verbose", type=bool, default=0, help="verbose mode")
 
     args = parser.parse_args()
     
 
     run_ddqn(args)
+
+    
+
+    

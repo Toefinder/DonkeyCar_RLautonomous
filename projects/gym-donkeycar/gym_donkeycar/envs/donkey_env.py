@@ -86,7 +86,7 @@ class DonkeyEnv(gym.Env):
         self.action_space = spaces.Box(
             low=np.array([self.STEER_LIMIT_LEFT, self.THROTTLE_MIN]),
             high=np.array([self.STEER_LIMIT_RIGHT, self.THROTTLE_MAX]),
-            dtype=np.float32,
+            dtype=np.float64, # debug
         )
 
         # camera sensor data
@@ -124,12 +124,13 @@ class DonkeyEnv(gym.Env):
         for i in range(self.frame_skip):
             self.viewer.take_action(action)
             observation, reward, done, info = self.viewer.observe()
+#             print(info["cte"]) # debug 
         return observation, reward, done, info
 
     def reset(self):
         self.viewer.reset()
         observation, reward, done, info = self.viewer.observe()
-        time.sleep(1)
+#         time.sleep(1) # make it faster
         return observation
 
     def render(self, mode="human", close=False):
