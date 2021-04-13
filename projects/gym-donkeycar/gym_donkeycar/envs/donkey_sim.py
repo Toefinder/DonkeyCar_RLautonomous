@@ -216,6 +216,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
         self.vel_x = 0.0
         self.vel_y = 0.0
         self.vel_z = 0.0
+        # self.lap = 0 # record the number of laps
 
     def get_sensor_size(self):
         return self.camera_img_size
@@ -224,8 +225,17 @@ class DonkeyUnitySimHandler(IMesgHandler):
         self.send_control(action[0], action[1])
 
     def observe(self):
+#         print("entering...") # debug 
         while self.last_obs is self.image_array:
             time.sleep(1.0 / 120.0)
+#         if (self.last_obs == self.image_array).all():
+#             print("no change") # debug
+#         i = 0
+#         while (i < 3):
+#             time.sleep(1)
+#             if (self.last_obs == self.image_array).all():
+#                 print("no change") # debug
+#             i += 1
 
         self.last_obs = self.image_array
         observation = self.image_array
@@ -241,6 +251,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
             "gyro": (self.gyro_x, self.gyro_y, self.gyro_z),
             "accel": (self.accel_x, self.accel_y, self.accel_z),
             "vel": (self.vel_x, self.vel_y, self.vel_z),
+            # "lap" : (self.lap) # lap info
         }
 
         # self.timer.on_frame()
@@ -316,6 +327,8 @@ class DonkeyUnitySimHandler(IMesgHandler):
 
     def on_cross_start(self, data):
         logger.info(f"crossed start line: lap_time {data['lap_time']}")
+        # self.lap += 1 # lap info
+        # print("crossed the start line") # debug
 
     def on_race_start(self, data):
         logger.debug("race started")
@@ -347,6 +360,7 @@ class DonkeyUnitySimHandler(IMesgHandler):
     def determine_episode_over(self):
         # we have a few initial frames on start that are sometimes very large CTE when it's behind
         # the path just slightly. We ignore those.
+
         if math.fabs(self.cte) > 2 * self.max_cte:
             pass
         elif math.fabs(self.cte) > self.max_cte:

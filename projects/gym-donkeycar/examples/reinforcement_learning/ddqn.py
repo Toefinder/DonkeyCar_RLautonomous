@@ -21,7 +21,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import Activation, Conv2D, Dense, Flatten
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
-
+import matplotlib.pyplot as plt # debug
 # logging
 # from stable_baselines import logger
 # from stable_baselines.common import explained_variance, tf_util, TensorboardWriter
@@ -105,6 +105,8 @@ class DQNAgent:
     def process_image(self, obs):
         obs = self.rgb2gray(obs)
         obs = cv2.resize(obs, (img_rows, img_cols))
+#         print("in process_image") # debug 
+#         plt.imshow(obs) # debug
         return obs
 
     def update_target_model(self):
@@ -206,6 +208,8 @@ def ep_over_fn(self):
     # we have a few initial frames on start that are sometimes very large CTE when it's behind
     # the path just slightly. We ignore those.
     global DEBUG_MODE
+    global episode_len
+    global MAX_EPISODE_LEN
     if math.fabs(self.cte) > 2 * self.max_cte:
         pass
     elif self.cte > 1/2 * self.max_cte:
@@ -217,6 +221,9 @@ def ep_over_fn(self):
     elif self.hit != "none":
         if DEBUG_MODE: print(f"game over: hit {self.hit}")
         self.over = True
+    elif episode_len >= MAX_EPISODE_LEN:
+        if DEBUG_MODE: print(f"game won: survived {MAX_EPISODE_LEN} timesteps in episode")
+        self.over = True
     elif self.missed_checkpoint:
         if DEBUG_MODE: print("missed checkpoint")
         self.over = True
@@ -225,8 +232,13 @@ def ep_over_fn(self):
         self.over = True
 
 def calc_reward(self, done):
+    # global MAX_EPISODE_LEN
+    # global episode_len
     if done:
         return -5.0
+
+    # if done and episode_len >= MAX_EPISODE_LEN:
+    #     return 100 # high reward for surviving the entire time
 
     if self.cte > self.max_cte:
         return -5.0
@@ -273,6 +285,13 @@ def run_ddqn(args):
     DEBUG_MODE = args.debug_mode
 #     print(DEBUG_MODE) # debug
 
+    # maximum episode length to decide when to stop the episode
+    global MAX_EPISODE_LEN
+    MAX_EPISODE_LEN = args.max_ep_len
+    global episode_len # tracks the length of the episodes
+    episode_len = 0
+#     print(MAX_EPISODE_LEN) # debug
+
     conf = {
         "exe_path": args.sim,
         "host": "127.0.0.1",
@@ -308,7 +327,6 @@ def run_ddqn(args):
     # Get size of state and action from environment
     state_size = (img_rows, img_cols, img_channels)
     action_space = env.action_space  # Steering and Throttle
-    
 
     try:
         agent = DQNAgent(state_size, action_space, train=not args.test)
@@ -361,8 +379,10 @@ def run_ddqn(args):
 #                 episode_all_cte = np.append(episode_all_cte, np.array([info["cte"]]))
                 episode_average_speed = (episode_average_speed * episode_len + info["speed"])/ (episode_len +1) 
                 episode_average_cte = (episode_average_cte * episode_len + info["cte"])/ (episode_len +1) 
-                
+#                lap = info["lap"] # debug lap info
                 x_t1 = agent.process_image(next_obs)
+                # plt.imshow(agent.process_image(next_obs)) # debug
+                # plt.savefig("{}.png".format(agent.t)) # debug
 
                 x_t1 = x_t1.reshape(1, x_t1.shape[0], x_t1.shape[1], 1)  # 1x80x80x1
                 s_t1 = np.append(x_t1, s_t[:, :, :, :3], axis=3)  # 1x80x80x4
@@ -391,6 +411,8 @@ def run_ddqn(args):
                         episode_len,
                         "/ Q_MAX ",
                         agent.max_Q,
+			            # "/ LAP ",
+			            # lap
                     )
 
 
@@ -414,6 +436,8 @@ def run_ddqn(args):
                         agent.epsilon,
                         " episode length:",
                         episode_len,
+                        " episode total reward:", 
+                        episode_total_reward
                     )
                     
                     # Use writer to save the result
@@ -465,6 +489,8 @@ if __name__ == "__main__":
     parser.add_argument("--gpu", type=int, default=0, help="name of GPU to use")
     parser.add_argument("--debug_mode", type=int, default=0, help="debug mode")
     parser.add_argument("--eps", type=int, default=10000, help="number of episodes to train for")
+    parser.add_argument("--max_ep_len", type=int, default=2000, help="maximum length per episode") 
+
 
     args = parser.parse_args()
     

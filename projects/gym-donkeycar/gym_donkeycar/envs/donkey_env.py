@@ -124,7 +124,6 @@ class DonkeyEnv(gym.Env):
         for i in range(self.frame_skip):
             self.viewer.take_action(action)
             observation, reward, done, info = self.viewer.observe()
-#             print(info["cte"]) # debug 
         return observation, reward, done, info
 
     def reset(self):
