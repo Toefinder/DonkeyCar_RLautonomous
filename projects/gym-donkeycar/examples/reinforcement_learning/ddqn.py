@@ -234,17 +234,22 @@ def ep_over_fn(self):
 def calc_reward(self, done):
     # global MAX_EPISODE_LEN
     # global episode_len
-    if done:
-        return -5.0
+    # if done:
+        # return -5.0
 
     # if done and episode_len >= MAX_EPISODE_LEN:
     #     return 100 # high reward for surviving the entire time
 
-    if self.cte > self.max_cte:
-        return -5.0
+    if done:
+        if self.cte > 1/2 * self.max_cte or self.cte < (-1) * self.max_cte:
+            return -5.0
+        
+        elif self.hit != "none":
+            return -5.0
 
-    if self.hit != "none":
-        return -2.0
+        # else:
+        #     return 0
+
 
     # going fast close to the center of lane yields best reward
     return 1.0 - (math.fabs(self.cte)/self.max_cte)
