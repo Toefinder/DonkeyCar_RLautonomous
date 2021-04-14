@@ -19,6 +19,11 @@ import numpy as np
 import tensorflow as tf
 # from tensorflow.keras import backend as K
 from tensorflow.keras.layers import Activation, Conv2D, Dense, Flatten
+from tensorflow.keras.layers import Input
+from tensorflow.keras.layers import MaxPooling2D
+from tensorflow.keras.layers import Dropout
+from tensorflow.keras.layers import LSTM
+from tensorflow.keras.layers import TimeDistributed as TD
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt # debug
@@ -64,36 +69,43 @@ class DQNAgent:
 
         # Create main model and target model
         self.model = self.build_model()
-        self.target_model = self.build_model()
+        self.target_model = self.build_model(seq_length=img_channels, num_outputs=15, input_shape=(img_rows, img_cols))
 
         # Copy the model to target model
         # --> initialize the target model so that the parameters of model & target model to be same
         self.update_target_model()
 
-    def build_model(self):
+    def build_model(self, seq_length=4, num_outputs=15, input_shape=(80, 80)):
+        img_seq_shape = (seq_length,) + input_shape   
+        img_in = Input(shape=img_seq_shape, name='img_in')
+        drop_out = 0.3
+
         model = Sequential()
-        model.add(
-            Conv2D(24, (5, 5), strides=(2, 2), padding="same", input_shape=(img_rows, img_cols, img_channels))
-        )  # 80*80*4
-        model.add(Activation("relu"))
-        model.add(Conv2D(32, (5, 5), strides=(2, 2), padding="same"))
-        model.add(Activation("relu"))
-        model.add(Conv2D(64, (5, 5), strides=(2, 2), padding="same"))
-        model.add(Activation("relu"))
-        model.add(Conv2D(64, (3, 3), strides=(2, 2), padding="same"))
-        model.add(Activation("relu"))
-        model.add(Conv2D(64, (3, 3), strides=(1, 1), padding="same"))
-        model.add(Activation("relu"))
-        model.add(Flatten())
-        model.add(Dense(512))
-        model.add(Activation("relu"))
+        model.add(TD(Conv2D(24, (5,5), strides=(2,2), activation='relu'),
+                input_shape=img_seq_shape)) # 4*80*80
+        model.add(TD(Dropout(drop_out)))
+        model.add(TD(Conv2D(32, (5, 5), strides=(2, 2), activation='relu')))
+        model.add(TD(Dropout(drop_out)))
+        model.add(TD(Conv2D(32, (3, 3), strides=(2, 2), activation='relu')))
+        model.add(TD(Dropout(drop_out)))
+        model.add(TD(Conv2D(32, (3, 3), strides=(1, 1), activation='relu')))
+        model.add(TD(Dropout(drop_out)))
+        model.add(TD(MaxPooling2D(pool_size=(2, 2))))
+        model.add(TD(Flatten(name='flattened')))
+        model.add(TD(Dense(100, activation='relu')))
+        model.add(TD(Dropout(drop_out)))
+        
+        model.add(LSTM(128, return_sequences=True, name="LSTM_seq"))
+        model.add(Dropout(.1))
+        model.add(LSTM(128, return_sequences=False, name="LSTM_fin"))
+        model.add(Dropout(.1))
+        model.add(Dense(128, activation='relu'))
+        model.add(Dropout(.1))
+        model.add(Dense(64, activation='relu'))
+        # model.add(Dense(10, activation='relu'))
+        model.add(Dense(num_outputs, activation='linear', name='model_outputs'))
 
-        # 15 categorical bins for Steering angles
-        model.add(Dense(15, activation="linear"))
-
-        adam = Adam(lr=self.learning_rate)
-        model.compile(loss="mse", optimizer=adam)
-
+        model.compile(optimizer="rmsprop", loss='mse')
         return model
 
     def rgb2gray(self, rgb):
@@ -365,9 +377,9 @@ def run_ddqn(args):
             
             x_t = agent.process_image(obs)
 
-            s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
-            # In Keras, need to reshape
-            s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  # 1*80*80*4
+            s_t = np.stack((x_t, x_t, x_t, x_t), axis=0) # 4*80*80
+            # In Keras, need to reshape 
+            s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  # 1*4*80*80
             
             
             while not done:
@@ -394,8 +406,8 @@ def run_ddqn(args):
                 # plt.imshow(agent.process_image(next_obs)) # debug
                 # plt.savefig("{}.png".format(agent.t)) # debug
 
-                x_t1 = x_t1.reshape(1, x_t1.shape[0], x_t1.shape[1], 1)  # 1x80x80x1
-                s_t1 = np.append(x_t1, s_t[:, :, :, :3], axis=3)  # 1x80x80x4
+                x_t1 = x_t1.reshape(1, 1, x_t1.shape[0], x_t1.shape[1])  # 1x1x80x80
+                s_t1 = np.append(x_t1, s_t[:, :3, :, :], axis=1)  # 1x4x80x80
 
                 # Save the sample <s, a, r, s'> to the replay memory
                 agent.replay_memory(s_t, np.argmax(linear_bin(steering)), reward, s_t1, done)

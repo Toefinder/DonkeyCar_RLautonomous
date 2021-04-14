@@ -132,7 +132,8 @@ class DonkeyEnv(gym.Env):
 #         time.sleep(1) # make it faster
         return observation
 
-    def render(self, mode="human", close=False):
+    # def render(self, mode="human", close=False):
+    def render(self, mode="rgb_array", close=False):
         if close:
             self.viewer.quit()
 
