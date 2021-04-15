@@ -68,7 +68,7 @@ class DQNAgent:
         self.memory = deque(maxlen=10000)
 
         # Create main model and target model
-        self.model = self.build_model()
+        self.model = self.build_model(seq_length=img_channels, num_outputs=15, input_shape=(img_rows, img_cols))
         self.target_model = self.build_model(seq_length=img_channels, num_outputs=15, input_shape=(img_rows, img_cols))
 
         # Copy the model to target model
@@ -76,13 +76,13 @@ class DQNAgent:
         self.update_target_model()
 
     def build_model(self, seq_length=4, num_outputs=15, input_shape=(80, 80)):
-        img_seq_shape = (seq_length,) + input_shape   
-        img_in = Input(shape=img_seq_shape, name='img_in')
+        img_seq_shape = (seq_length,) + input_shape + (1,)
+        # img_in = Input(shape=img_seq_shape, name='img_in')
         drop_out = 0.3
 
         model = Sequential()
-        model.add(TD(Conv2D(24, (5,5), strides=(2,2), activation='relu'),
-                input_shape=img_seq_shape)) # 4*80*80
+        model.add(Input(shape=img_seq_shape, name='img_in')) # 4*80*80
+        model.add(TD(Conv2D(24, (5,5), strides=(2,2), activation='relu'))) 
         model.add(TD(Dropout(drop_out)))
         model.add(TD(Conv2D(32, (5, 5), strides=(2, 2), activation='relu')))
         model.add(TD(Dropout(drop_out)))
@@ -106,6 +106,7 @@ class DQNAgent:
         model.add(Dense(num_outputs, activation='linear', name='model_outputs'))
 
         model.compile(optimizer="rmsprop", loss='mse')
+
         return model
 
     def rgb2gray(self, rgb):
@@ -154,7 +155,7 @@ class DQNAgent:
         state_t, action_t, reward_t, state_t1, terminal = zip(*minibatch)
         
         state_t = np.concatenate(state_t)
-#         print(state_t.shape) # debug
+        # print(state_t.shape) # debug
         state_t1 = np.concatenate(state_t1)
         targets = self.model.predict(state_t)
         self.max_Q = np.max(targets[0])
@@ -379,7 +380,7 @@ def run_ddqn(args):
 
             s_t = np.stack((x_t, x_t, x_t, x_t), axis=0) # 4*80*80
             # In Keras, need to reshape 
-            s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  # 1*4*80*80
+            s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2], 1)  # 1*4*80*80*1
             
             
             while not done:
@@ -406,9 +407,10 @@ def run_ddqn(args):
                 # plt.imshow(agent.process_image(next_obs)) # debug
                 # plt.savefig("{}.png".format(agent.t)) # debug
 
-                x_t1 = x_t1.reshape(1, 1, x_t1.shape[0], x_t1.shape[1])  # 1x1x80x80
+                x_t1 = x_t1.reshape(1, 1, x_t1.shape[0], x_t1.shape[1],1)  # 1x1x80x80x1
                 s_t1 = np.append(x_t1, s_t[:, :3, :, :], axis=1)  # 1x4x80x80
 
+                
                 # Save the sample <s, a, r, s'> to the replay memory
                 agent.replay_memory(s_t, np.argmax(linear_bin(steering)), reward, s_t1, done)
                 agent.update_epsilon()
