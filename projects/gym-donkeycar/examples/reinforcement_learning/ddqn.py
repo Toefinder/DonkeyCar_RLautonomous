@@ -110,13 +110,13 @@ class DQNAgent:
 
     #     if LANE_SEGMENTATION: obs = detect_edge(obs)
     #     return obs
-    def process_image(obs):
+    def process_image(self, obs):
         global LANE_SEGMENTATION 
         obs = cv2.resize(obs, (img_rows, img_cols))
         if LANE_SEGMENTATION: 
             obs = detect_edge(obs)
         else:
-            obs = rgb2gray(obs)
+            obs = self.rgb2gray(obs)
             
         return obs
 
@@ -290,16 +290,22 @@ def run_ddqn(args):
 #     # Run on the GPU
 #     c = tf.matmul(a, b)
 
-    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    train_log_dir = 'logs/reward/train/' + current_time 
-    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
-    
-    # number of episodes
-    EPISODES = args.eps 
     # debug mode
     global DEBUG_MODE
     DEBUG_MODE = args.debug_mode
 #     print(DEBUG_MODE) # debug
+
+    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    if DEBUG_MODE:
+        train_log_dir = 'logs/reward/debug/' + current_time 
+    else:
+        train_log_dir = 'logs/reward/train/' + current_time 
+        
+    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+    
+    # number of episodes
+    EPISODES = args.eps 
+    
 
     # maximum episode length to decide when to stop the episode
     global MAX_EPISODE_LEN
