@@ -102,13 +102,22 @@ class DQNAgent:
         """
         return np.dot(rgb[..., :3], [0.299, 0.587, 0.114])
 
-    def process_image(self, obs):
+    # def process_image(self, obs):
+    #     global LANE_SEGMENTATION 
+    #     obs = self.rgb2gray(obs)
+    #     obs = cv2.resize(obs, (img_rows, img_cols))
+
+
+    #     if LANE_SEGMENTATION: obs = detect_edge(obs)
+    #     return obs
+    def process_image(obs):
         global LANE_SEGMENTATION 
-        obs = self.rgb2gray(obs)
         obs = cv2.resize(obs, (img_rows, img_cols))
-#         print("in process_image") # debug 
-#         plt.imshow(obs) # debug
-        if LANE_SEGMENTATION: obs = detect_edge(obs)
+        if LANE_SEGMENTATION: 
+            obs = detect_edge(obs)
+        else:
+            obs = rgb2gray(obs)
+            
         return obs
 
     def update_target_model(self):
