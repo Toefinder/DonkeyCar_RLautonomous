@@ -112,6 +112,10 @@ class DQNAgent:
     #     return obs
     def process_image(self, obs):
         global LANE_SEGMENTATION 
+        global KEEP_RATIO
+        if KEEP_RATIO:
+            top = obs.shape[1] - obs.shape[0]
+            obs = cv2.copyMakeBorder(obs, top, 0, 0, 0, cv2.BORDER_REPLICATE)
         obs = cv2.resize(obs, (img_rows, img_cols))
         if LANE_SEGMENTATION: 
             obs = detect_edge(obs)
@@ -300,7 +304,7 @@ def run_ddqn(args):
         train_log_dir = 'logs/reward/debug/' + current_time 
     else:
         train_log_dir = 'logs/reward/train/' + current_time 
-        
+
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
     
     # number of episodes
@@ -315,6 +319,8 @@ def run_ddqn(args):
 #     print(MAX_EPISODE_LEN) # debug
     global LANE_SEGMENTATION
     LANE_SEGMENTATION = args.lane_segment
+    global KEEP_RATIO
+    KEEP_RATIO = args.keep_ratio
 
     conf = {
         "exe_path": args.sim,
@@ -516,7 +522,7 @@ if __name__ == "__main__":
     parser.add_argument("--eps", type=int, default=10000, help="number of episodes to train for")
     parser.add_argument("--max_ep_len", type=int, default=2000, help="maximum length per episode") 
     parser.add_argument("--lane_segment", type=int, default=0, help="whether to perform lane segmentation") 
-
+    parser.add_argument("--keep_ratio", type=int, default=0, help="whether to keep the image aspect ratio by padding before resizing") 
 
     args = parser.parse_args()
     
