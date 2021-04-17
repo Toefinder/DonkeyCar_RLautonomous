@@ -326,6 +326,9 @@ def run_ddqn(args):
     LANE_SEGMENTATION = args.lane_segment
     global KEEP_RATIO
     KEEP_RATIO = args.keep_ratio
+    global IMAGE_RESCALE
+    IMAGE_RESCALE = args.image_rescale
+    
 
     conf = {
         "exe_path": args.sim,
