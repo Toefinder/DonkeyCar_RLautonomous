@@ -113,14 +113,19 @@ class DQNAgent:
     def process_image(self, obs):
         global LANE_SEGMENTATION 
         global KEEP_RATIO
+        global IMAGE_RESCALE
         if KEEP_RATIO:
             top = obs.shape[1] - obs.shape[0]
             obs = cv2.copyMakeBorder(obs, top, 0, 0, 0, cv2.BORDER_REPLICATE)
+        
         obs = cv2.resize(obs, (img_rows, img_cols))
         if LANE_SEGMENTATION: 
             obs = detect_edge(obs)
         else:
             obs = self.rgb2gray(obs)
+        
+        if IMAGE_RESCALE:
+            obs = obs/255.0
             
         return obs
 
@@ -523,7 +528,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_ep_len", type=int, default=2000, help="maximum length per episode") 
     parser.add_argument("--lane_segment", type=int, default=0, help="whether to perform lane segmentation") 
     parser.add_argument("--keep_ratio", type=int, default=0, help="whether to keep the image aspect ratio by padding before resizing") 
-
+    parser.add_argument("--image_rescale", type=int, default=0, help="whether to rescale the image pixels before feeding it into the CNN") 
     args = parser.parse_args()
     
 
