@@ -13,18 +13,12 @@ import uuid
 from collections import deque
 
 import cv2
-
 import gym
 import gym_donkeycar
 import numpy as np
 import tensorflow as tf
 # from tensorflow.keras import backend as K
 from tensorflow.keras.layers import Activation, Conv2D, Dense, Flatten
-from tensorflow.keras.layers import Input
-from tensorflow.keras.layers import MaxPooling2D
-from tensorflow.keras.layers import Dropout
-from tensorflow.keras.layers import LSTM
-from tensorflow.keras.layers import TimeDistributed as TD
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt # debug
@@ -38,6 +32,17 @@ from imageprocess import detect_edge
 img_rows, img_cols = 80, 80
 # Convert image into Black and white
 img_channels = 4  # We stack 4 frames
+steering_binsize = 5
+throttle_binsize = 5
+steering_min = -0.5
+steering_max = 0.5
+throttle_min = 0
+throttle_max = 1
+
+env_steering_min = -1
+env_steering_max = 1
+env_throttle_min = 0
+env_throttle_max = 1
 
 
 class DQNAgent:
@@ -69,46 +74,36 @@ class DQNAgent:
         self.memory = deque(maxlen=10000)
 
         # Create main model and target model
-        self.model = self.build_model(seq_length=img_channels, num_outputs=15, input_shape=(img_rows, img_cols))
-        self.target_model = self.build_model(seq_length=img_channels, num_outputs=15, input_shape=(img_rows, img_cols))
+        self.model = self.build_model()
+        self.target_model = self.build_model()
 
         # Copy the model to target model
         # --> initialize the target model so that the parameters of model & target model to be same
         self.update_target_model()
 
-    def build_model(self, seq_length=4, num_outputs=15, input_shape=(80, 80)):
-        img_seq_shape = (seq_length,) + input_shape + (1,)
-        # img_in = Input(shape=img_seq_shape, name='img_in')
-        # drop_out = 0.3
-
+    def build_model(self):
         model = Sequential()
-        model.add(Input(shape=img_seq_shape, name='img_in')) # 4*80*80
-        model.add(TD(Conv2D(24, (5,5), strides=(2,2), activation='relu'))) # can try conv3d instead of td(conv2d)
-        # model.add(TD(Dropout(drop_out)))
-        model.add(TD(Conv2D(32, (5, 5), strides=(2, 2), activation='relu')))
-        # model.add(TD(Dropout(drop_out)))
-        model.add(TD(Conv2D(64, (3, 3), strides=(2, 2), activation='relu')))
-        # model.add(TD(Dropout(drop_out)))
-        model.add(TD(Conv2D(128, (3, 3), strides=(1, 1), activation='relu')))
-        # model.add(TD(Dropout(drop_out)))
-        # model.add(TD(MaxPooling2D(pool_size=(2, 2)))) # can use global average pooling instead of max and flatten
-        # model.add(TD(Flatten(name='flattened')))
-        # model.add(TD(Dense(100, activation='relu'))) 
-        model.add(TD(GlobalAveragePooling2D()))
+        model.add(
+            Conv2D(24, (5, 5), strides=(2, 2), padding="same", input_shape=(img_rows, img_cols, img_channels))
+        )  # 80*80*4
+        model.add(Activation("relu"))
+        model.add(Conv2D(32, (5, 5), strides=(2, 2), padding="same"))
+        model.add(Activation("relu"))
+        model.add(Conv2D(64, (5, 5), strides=(2, 2), padding="same"))
+        model.add(Activation("relu"))
+        model.add(Conv2D(64, (3, 3), strides=(2, 2), padding="same"))
+        model.add(Activation("relu"))
+        model.add(Conv2D(64, (3, 3), strides=(1, 1), padding="same"))
+        model.add(Activation("relu"))
+        model.add(Flatten())
+        model.add(Dense(512))
+        model.add(Activation("relu"))
 
-        # model.add(TD(Dropout(drop_out)))
-        
-        model.add(LSTM(128, return_sequences=True, name="LSTM_seq"))
-        # model.add(Dropout(.1))
-        model.add(LSTM(128, return_sequences=False, name="LSTM_fin"))
-        # model.add(Dropout(.1))
-        model.add(Dense(128, activation='relu'))
-        # model.add(Dropout(.1))
-        model.add(Dense(64, activation='relu'))
-        # model.add(Dense(10, activation='relu'))
-        model.add(Dense(num_outputs, activation='linear', name='model_outputs'))
+        # 25 categorical bins for Steering angles (5) and Throttle (5)
+        model.add(Dense(25, activation="linear", name="steering_throttle"))
 
-        model.compile(optimizer="rmsprop", loss='mse') # can also try adam
+        adam = Adam(lr=self.learning_rate)
+        model.compile(loss="mse", optimizer=adam)
 
         return model
 
@@ -133,13 +128,17 @@ class DQNAgent:
     # Get action from model using epsilon-greedy policy
     def get_action(self, s_t):
         if np.random.rand() <= self.epsilon:
-            return self.action_space.sample()[0]
+            sampled_steering = np.interp(self.action_space.sample()[0], [env_steering_min, env_steering_max], [steering_min, steering_max])
+            sampled_throttle = np.interp(self.action_space.sample()[1], [env_throttle_min, env_throttle_max], [throttle_min, throttle_max])
+            steering = linear_bin(sampled_steering, size=steering_binsize, min_val=steering_min, max_val=steering_max)
+            throttle = linear_bin(sampled_throttle, size=throttle_binsize, min_val=throttle_min, max_val=throttle_max)
+            return throttle_binsize * np.argmax(steering) + np.argmax(throttle)
         else:
             # print("Return Max Q Prediction")
             q_value = self.model.predict(s_t)
-
-            # Convert q array to steering value
-            return linear_unbin(q_value[0])
+            
+            # Convert q array to steering and throttle value
+            return np.argmax(q_value[0])
 
     def replay_memory(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
@@ -158,7 +157,7 @@ class DQNAgent:
         state_t, action_t, reward_t, state_t1, terminal = zip(*minibatch)
         
         state_t = np.concatenate(state_t)
-        # print(state_t.shape) # debug
+#         print(state_t.shape) # debug
         state_t1 = np.concatenate(state_t1)
         targets = self.model.predict(state_t)
         self.max_Q = np.max(targets[0])
@@ -187,28 +186,28 @@ class DQNAgent:
 # Utils Functions #
 
 
-def linear_bin(a):
+def linear_bin(a, size=15, min_val=-1, max_val=1):
     """
     Convert a value to a categorical array.
 
     Parameters
     ----------
     a : int or float
-        A value between -1 and 1
+        A value between min_val and max_val
 
     Returns
     -------
     list of int
-        A list of length 15 with one item set to 1, which represents the linear value, and all other items set to 0.
+        A list of length "size" with one item set to 1, which represents the linear value, and all other items set to 0.
     """
-    a = a + 1
-    b = round(a / (2 / 14))
-    arr = np.zeros(15)
+    a = a - min_val
+    b = round(a / ((max_val-min_val) / (size-1)))
+    arr = np.zeros(size)
     arr[int(b)] = 1
     return arr
 
 
-def linear_unbin(arr):
+def linear_unbin(arr, size=15, min_val=-1, max_val=1):
     """
     Convert a categorical array to value.
 
@@ -216,10 +215,10 @@ def linear_unbin(arr):
     --------
     linear_bin
     """
-    if not len(arr) == 15:
-        raise ValueError("Illegal array length, must be 15")
+    if not len(arr) == size:
+        raise ValueError("Illegal array length, must be {}".format(size))
     b = np.argmax(arr)
-    a = b * (2 / 14) - 1
+    a = b * ((max_val-min_val) / (size-1)) + min_val
     return a
 
 def ep_over_fn(self):
@@ -356,7 +355,7 @@ def run_ddqn(args):
     try:
         agent = DQNAgent(state_size, action_space, train=not args.test)
 
-        throttle = args.throttle  # Set throttle as constant value
+        # throttle = args.throttle  # Set throttle as constant value
 
         episodes = []
 
@@ -376,20 +375,34 @@ def run_ddqn(args):
 #             episode_all_cte = np.array([])
             episode_average_speed = 0
             episode_average_cte = 0
+            episode_average_throttle = 0
+            episode_average_steering = 0
 
             obs = env.reset()
             
             x_t = agent.process_image(obs)
 
-            s_t = np.stack((x_t, x_t, x_t, x_t), axis=0) # 4*80*80
-            # In Keras, need to reshape 
-            s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2], 1)  # 1*4*80*80*1
+            s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
+            # In Keras, need to reshape
+            s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  # 1*80*80*4
             
             
             while not done:
 
                 # Get action for the current state and go one step in environment
-                steering = agent.get_action(s_t)
+                
+                steering_throttle = agent.get_action(s_t)
+                # print("action = {}".format(steering_throttle)) # debug steering_throttle
+
+                steering_array = np.zeros(steering_binsize)
+                steering_array[steering_throttle // throttle_binsize] = 1 
+                steering = linear_unbin(steering_array, size=steering_binsize, min_val=steering_min, max_val=steering_max)
+                # print("steering = {}".format(steering))# debug steering_throttle
+                throttle_array = np.zeros(throttle_binsize)
+                throttle_array[steering_throttle % throttle_binsize] = 1 
+                throttle = linear_unbin(throttle_array, size=throttle_binsize, min_val=throttle_min, max_val=throttle_max)
+                # print("throttle = {}".format(throttle)) # debug steering_throttle
+                
                 action = [steering, throttle]
                 next_obs, reward, done, info = env.step(action)
                 
@@ -406,16 +419,18 @@ def run_ddqn(args):
                 episode_average_speed = (episode_average_speed * episode_len + info["speed"])/ (episode_len +1) 
                 episode_average_cte = (episode_average_cte * episode_len + info["cte"])/ (episode_len +1) 
 #                lap = info["lap"] # debug lap info
+                episode_average_throttle = (episode_average_throttle * episode_len + throttle)/ (episode_len +1) 
+                episode_average_steering = (episode_average_steering * episode_len + steering)/ (episode_len +1) 
+
                 x_t1 = agent.process_image(next_obs)
                 # plt.imshow(agent.process_image(next_obs)) # debug
                 # plt.savefig("{}.png".format(agent.t)) # debug
 
-                x_t1 = x_t1.reshape(1, 1, x_t1.shape[0], x_t1.shape[1],1)  # 1x1x80x80x1
-                s_t1 = np.append(x_t1, s_t[:, :3, :, :], axis=1)  # 1x4x80x80
+                x_t1 = x_t1.reshape(1, x_t1.shape[0], x_t1.shape[1], 1)  # 1x80x80x1
+                s_t1 = np.append(x_t1, s_t[:, :, :, :3], axis=3)  # 1x80x80x4
 
-                
                 # Save the sample <s, a, r, s'> to the replay memory
-                agent.replay_memory(s_t, np.argmax(linear_bin(steering)), reward, s_t1, done)
+                agent.replay_memory(s_t, steering_throttle, reward, s_t1, done)
                 agent.update_epsilon()
 
                 if agent.train:
@@ -476,6 +491,8 @@ def run_ddqn(args):
 #                         tf.summary.scalar('episode average cte verify', np.sum(episode_all_cte)/episode_len, step=e)
                         tf.summary.scalar('episode average speed', episode_average_speed, step=e)
                         tf.summary.scalar('episode average cte', episode_average_cte, step=e)
+                        tf.summary.scalar('episode average throttle', episode_average_throttle, step=e)
+                        tf.summary.scalar('episode average steering', episode_average_steering, step=e)
         if agent.train:
             agent.save_ready_model(args.model[:-3]+"_ready.h5")
     except KeyboardInterrupt:
