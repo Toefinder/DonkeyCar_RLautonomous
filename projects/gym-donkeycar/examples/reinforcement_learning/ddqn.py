@@ -71,21 +71,46 @@ class DQNAgent:
         self.update_target_model()
 
     def build_model(self):
+        # model = Sequential()
+        # model.add(
+        #     Conv2D(24, (5, 5), strides=(2, 2), padding="same", input_shape=(img_rows, img_cols, img_channels))
+        # )  # 80*80*4
+        # model.add(Activation("relu"))
+        # model.add(Conv2D(32, (5, 5), strides=(2, 2), padding="same"))
+        # model.add(Activation("relu"))
+        # model.add(Conv2D(64, (5, 5), strides=(2, 2), padding="same"))
+        # model.add(Activation("relu"))
+        # model.add(Conv2D(64, (3, 3), strides=(2, 2), padding="same"))
+        # model.add(Activation("relu"))
+        # model.add(Conv2D(64, (3, 3), strides=(1, 1), padding="same"))
+        # model.add(Activation("relu"))
+        # model.add(Flatten())
+        # model.add(Dense(512))
+        # model.add(Activation("relu"))
+
+        # # 15 categorical bins for Steering angles
+        # model.add(Dense(15, activation="linear"))
+
+        # adam = Adam(lr=self.learning_rate)
+        # model.compile(loss="mse", optimizer=adam)
+
         model = Sequential()
         model.add(
-            Conv2D(24, (5, 5), strides=(2, 2), padding="same", input_shape=(img_rows, img_cols, img_channels))
+            Conv2D(16, (5, 5), strides=(2, 2), padding="same", input_shape=(img_rows, img_cols, img_channels))
         )  # 80*80*4
         model.add(Activation("relu"))
         model.add(Conv2D(32, (5, 5), strides=(2, 2), padding="same"))
         model.add(Activation("relu"))
         model.add(Conv2D(64, (5, 5), strides=(2, 2), padding="same"))
         model.add(Activation("relu"))
-        model.add(Conv2D(64, (3, 3), strides=(2, 2), padding="same"))
+        model.add(Conv2D(128, (3, 3), strides=(2, 2), padding="same"))
         model.add(Activation("relu"))
-        model.add(Conv2D(64, (3, 3), strides=(1, 1), padding="same"))
+        model.add(Conv2D(256, (3, 3), strides=(1, 1), padding="same"))
         model.add(Activation("relu"))
-        model.add(Flatten())
-        model.add(Dense(512))
+        
+        model.add(layers.GlobalAveragePooling2D()) # replace the CNN model with a custom one
+        
+        model.add(Dense(128))
         model.add(Activation("relu"))
 
         # 15 categorical bins for Steering angles
