@@ -18,7 +18,7 @@ import gym_donkeycar
 import numpy as np
 import tensorflow as tf
 # from tensorflow.keras import backend as K
-from tensorflow.keras.layers import Activation, Conv2D, Dense, Flatten
+from tensorflow.keras.layers import Activation, Conv2D, Dense, Flatten, GlobalAveragePooling2D
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 import matplotlib.pyplot as plt # debug
@@ -108,7 +108,7 @@ class DQNAgent:
         model.add(Conv2D(256, (3, 3), strides=(1, 1), padding="same"))
         model.add(Activation("relu"))
         
-        model.add(layers.GlobalAveragePooling2D()) # replace the CNN model with a custom one
+        model.add(GlobalAveragePooling2D()) # replace the CNN model with a custom one
         
         model.add(Dense(128))
         model.add(Activation("relu"))
