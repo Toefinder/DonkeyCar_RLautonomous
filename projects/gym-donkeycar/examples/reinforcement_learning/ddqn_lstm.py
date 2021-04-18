@@ -77,38 +77,55 @@ class DQNAgent:
         self.update_target_model()
 
     def build_model(self, seq_length=4, num_outputs=15, input_shape=(80, 80)):
+        # img_seq_shape = (seq_length,) + input_shape + (1,)
+        # # img_in = Input(shape=img_seq_shape, name='img_in')
+        # # drop_out = 0.3
+
+        # model = Sequential()
+        # model.add(Input(shape=img_seq_shape, name='img_in')) # 4*80*80
+        # model.add(TD(Conv2D(24, (5,5), strides=(2,2), activation='relu'))) # can try conv3d instead of td(conv2d)
+        # # model.add(TD(Dropout(drop_out)))
+        # model.add(TD(Conv2D(32, (5, 5), strides=(2, 2), activation='relu')))
+        # # model.add(TD(Dropout(drop_out)))
+        # model.add(TD(Conv2D(64, (3, 3), strides=(2, 2), activation='relu')))
+        # # model.add(TD(Dropout(drop_out)))
+        # model.add(TD(Conv2D(128, (3, 3), strides=(1, 1), activation='relu')))
+        # # model.add(TD(Dropout(drop_out)))
+        # # model.add(TD(MaxPooling2D(pool_size=(2, 2)))) # can use global average pooling instead of max and flatten
+        # # model.add(TD(Flatten(name='flattened')))
+        # # model.add(TD(Dense(100, activation='relu'))) 
+        # model.add(TD(GlobalAveragePooling2D()))
+
+        # # model.add(TD(Dropout(drop_out)))
+        
+        # model.add(LSTM(128, return_sequences=True, name="LSTM_seq"))
+        # # model.add(Dropout(.1))
+        # model.add(LSTM(128, return_sequences=False, name="LSTM_fin"))
+        # # model.add(Dropout(.1))
+        # model.add(Dense(128, activation='relu'))
+        # # model.add(Dropout(.1))
+        # model.add(Dense(64, activation='relu'))
+        # # model.add(Dense(10, activation='relu'))
+        # model.add(Dense(num_outputs, activation='linear', name='model_outputs'))
+
+        # model.compile(optimizer="rmsprop", loss='mse') # can also try adam
+
         img_seq_shape = (seq_length,) + input_shape + (1,)
-        # img_in = Input(shape=img_seq_shape, name='img_in')
-        # drop_out = 0.3
 
         model = Sequential()
-        model.add(Input(shape=img_seq_shape, name='img_in')) # 4*80*80
-        model.add(TD(Conv2D(24, (5,5), strides=(2,2), activation='relu'))) # can try conv3d instead of td(conv2d)
-        # model.add(TD(Dropout(drop_out)))
-        model.add(TD(Conv2D(32, (5, 5), strides=(2, 2), activation='relu')))
-        # model.add(TD(Dropout(drop_out)))
-        model.add(TD(Conv2D(64, (3, 3), strides=(2, 2), activation='relu')))
-        # model.add(TD(Dropout(drop_out)))
-        model.add(TD(Conv2D(128, (3, 3), strides=(1, 1), activation='relu')))
-        # model.add(TD(Dropout(drop_out)))
-        # model.add(TD(MaxPooling2D(pool_size=(2, 2)))) # can use global average pooling instead of max and flatten
-        # model.add(TD(Flatten(name='flattened')))
-        # model.add(TD(Dense(100, activation='relu'))) 
+        model.add(Input(shape=img_seq_shape, name='img_in')) # 4*80*80*1
+        model.add(TD(Conv2D(16, (5, 5), strides=(2, 2), padding="same", activation='relu'))) # can try conv3d instead of td(conv2d)
+        model.add(TD(Conv2D(64, (5, 5), strides=(2, 2), padding="same", activation='relu')))
+        model.add(TD(Conv2D(128, (3, 3), strides=(1, 1), padding="same", activation='relu')))
+        
         model.add(TD(GlobalAveragePooling2D()))
 
-        # model.add(TD(Dropout(drop_out)))
-        
-        model.add(LSTM(128, return_sequences=True, name="LSTM_seq"))
-        # model.add(Dropout(.1))
         model.add(LSTM(128, return_sequences=False, name="LSTM_fin"))
-        # model.add(Dropout(.1))
-        model.add(Dense(128, activation='relu'))
-        # model.add(Dropout(.1))
         model.add(Dense(64, activation='relu'))
-        # model.add(Dense(10, activation='relu'))
         model.add(Dense(num_outputs, activation='linear', name='model_outputs'))
 
-        model.compile(optimizer="rmsprop", loss='mse') # can also try adam
+        adam = Adam(lr=self.learning_rate)
+        model.compile(loss="mse", optimizer=adam)
 
         return model
 
@@ -118,13 +135,31 @@ class DQNAgent:
         """
         return np.dot(rgb[..., :3], [0.299, 0.587, 0.114])
 
+    # def process_image(self, obs):
+    #     global LANE_SEGMENTATION 
+    #     obs = self.rgb2gray(obs)
+    #     obs = cv2.resize(obs, (img_rows, img_cols))
+
+
+    #     if LANE_SEGMENTATION: obs = detect_edge(obs)
+    #     return obs
     def process_image(self, obs):
         global LANE_SEGMENTATION 
-        obs = self.rgb2gray(obs)
+        global KEEP_RATIO
+        global IMAGE_RESCALE
+        if KEEP_RATIO:
+            top = obs.shape[1] - obs.shape[0]
+            obs = cv2.copyMakeBorder(obs, top, 0, 0, 0, cv2.BORDER_REPLICATE)
+        
         obs = cv2.resize(obs, (img_rows, img_cols))
-#         print("in process_image") # debug 
-#         plt.imshow(obs) # debug
-        if LANE_SEGMENTATION: obs = detect_edge(obs)
+        if LANE_SEGMENTATION: 
+            obs = detect_edge(obs)
+        else:
+            obs = self.rgb2gray(obs)
+        
+        if IMAGE_RESCALE:
+            obs = obs/255.0
+            
         return obs
 
     def update_target_model(self):
@@ -316,6 +351,10 @@ def run_ddqn(args):
 #     print(MAX_EPISODE_LEN) # debug
     global LANE_SEGMENTATION
     LANE_SEGMENTATION = args.lane_segment
+    global KEEP_RATIO
+    KEEP_RATIO = args.keep_ratio
+    global IMAGE_RESCALE
+    IMAGE_RESCALE = args.image_rescale
 
     conf = {
         "exe_path": args.sim,
@@ -518,7 +557,8 @@ if __name__ == "__main__":
     parser.add_argument("--eps", type=int, default=10000, help="number of episodes to train for")
     parser.add_argument("--max_ep_len", type=int, default=2000, help="maximum length per episode") 
     parser.add_argument("--lane_segment", type=int, default=0, help="whether to perform lane segmentation") 
-
+    parser.add_argument("--keep_ratio", type=int, default=0, help="whether to keep the image aspect ratio by padding before resizing") 
+    parser.add_argument("--image_rescale", type=int, default=0, help="whether to rescale the image pixels before feeding it into the CNN") 
 
     args = parser.parse_args()
     
