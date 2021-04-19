@@ -7,24 +7,124 @@ from tensorflow.keras.layers import LSTM
 from tensorflow.keras.layers import TimeDistributed as TD
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
+import numpy as np
 
+## DDQN_LSTM_edit1
+def get_build_model_fn(model_name):
+    "return functions to build_model(), to properly format_input() state"
+    ##### Baseline CNN model
+    if model_name == "baseline":
+        # print("baseline chosen")
+        return build_model_cnnbaseline
+    
+    elif model_name == "cnnedit1":
+        return build_model_cnnedit1
 
-def build_model(self, seq_length=4, num_outputs=15, input_shape=(80, 80)):
-        img_seq_shape = (seq_length,) + input_shape + (1,)
+    elif model_name == "cnnedit1_lstm":
+        return build_model_cnnedit1_lstm
 
-        model = Sequential()
-        model.add(Input(shape=img_seq_shape, name='img_in')) # 4*80*80*1
-        model.add(TD(Conv2D(16, (5, 5), strides=(2, 2), padding="same", activation='relu'))) # can try conv3d instead of td(conv2d)
-        model.add(TD(Conv2D(64, (5, 5), strides=(2, 2), padding="same", activation='relu')))
-        model.add(TD(Conv2D(128, (3, 3), strides=(1, 1), padding="same", activation='relu')))
-        
-        model.add(TD(GlobalAveragePooling2D()))
+def get_initiate_state_fn(model_name):
+    if model_name in ["cnnedit1_lstm"]:
+        return initiate_state_lstm
+    else:
+        return initiate_state_cnn
 
-        model.add(LSTM(128, return_sequences=False, name="LSTM_fin"))
-        model.add(Dense(64, activation='relu'))
-        model.add(Dense(num_outputs, activation='linear', name='model_outputs'))
+def get_update_state_fn(model_name):
+    if model_name in ["cnnedit1_lstm"]:
+        return update_state_lstm
+    else:
+        return update_state_cnn
 
-        adam = Adam(lr=self.learning_rate)
-        model.compile(loss="mse", optimizer=adam)
+def initiate_state_lstm(self, x_t):        
+    s_t = np.stack((x_t, x_t, x_t, x_t), axis=0) # 4*80*80
+    # In Keras, need to reshape 
+    s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2], 1)  # 1*4*80*80*1
+    return s_t
 
-        return model
+def initiate_state_cnn(self, x_t):
+    s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
+    # In Keras, need to reshape
+    s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  # 1*80*80*4
+    return s_t
+
+def update_state_cnn(self, s_t, x_t1):
+    x_t1 = x_t1.reshape(1, x_t1.shape[0], x_t1.shape[1], 1)  # 1x80x80x1
+    s_t1 = np.append(x_t1, s_t[:, :, :, :3], axis=3)  # 1x80x80x4
+    return s_t1
+
+def update_state_lstm(self, s_t, x_t1):
+    x_t1 = x_t1.reshape(1, 1, x_t1.shape[0], x_t1.shape[1],1)  # 1x1x80x80x1
+    s_t1 = np.append(x_t1, s_t[:, :3, :, :], axis=1)  # 1x4x80x80x1
+    return s_t1
+
+def build_model_cnnbaseline(self):
+    """
+        The baseline CNN model. Note that self.state_size is (img_rows, img_cols_img_channels)
+    """
+    model = Sequential()
+    model.add(Conv2D(24, (5, 5), strides=(2, 2), padding="same", input_shape=self.state_size, activation='relu'))  # 80*80*4
+    model.add(Conv2D(32, (5, 5), strides=(2, 2), padding="same", activation='relu'))
+    model.add(Conv2D(64, (5, 5), strides=(2, 2), padding="same", activation='relu'))
+    model.add(Conv2D(64, (3, 3), strides=(2, 2), padding="same", activation='relu'))
+    model.add(Conv2D(64, (3, 3), strides=(1, 1), padding="same", activation='relu'))
+
+    model.add(Flatten())
+
+    model.add(Dense(512, activation="relu"))
+
+    # 15 categorical bins for Steering angles
+    model.add(Dense(self.action_size, activation="linear"))
+
+    adam = Adam(lr=self.learning_rate)
+    model.compile(loss="mse", optimizer=adam) 
+
+    return model    
+
+def build_model_cnnedit1(self):
+    """
+        The CNN model with some edits 
+    """
+    model = Sequential()
+    model.add(Conv2D(16, (5, 5), strides=(2, 2), padding="same", input_shape=self.state_size, activation='relu'))  # 80*80*4
+    model.add(Conv2D(32, (5, 5), strides=(2, 2), padding="same", activation='relu'))
+    model.add(Conv2D(64, (5, 5), strides=(2, 2), padding="same", activation='relu'))
+    model.add(Conv2D(128, (3, 3), strides=(2, 2), padding="same", activation='relu'))
+    model.add(Conv2D(256, (3, 3), strides=(1, 1), padding="same", activation='relu'))
+    
+    model.add(GlobalAveragePooling2D()) # replace the CNN model with a custom one
+    
+    model.add(Dense(128, activation='relu'))
+
+    # 15 categorical bins for Steering angles
+    model.add(Dense(self.action_size, activation="linear"))
+
+    adam = Adam(lr=self.learning_rate)
+    model.compile(loss="mse", optimizer=adam)
+
+    return model
+
+def build_model_cnnedit1_lstm(self):
+    seq_length = self.state_size[2]
+    input_shape = self.state_size[:2]
+
+    img_seq_shape = (seq_length,) + input_shape + (1,)
+
+    model = Sequential()
+    model.add(Input(shape=img_seq_shape, name='img_in')) # 4*80*80*1
+    model.add(TD(Conv2D(16, (5, 5), strides=(2, 2), padding="same", activation='relu')))
+    model.add(TD(Conv2D(32, (5, 5), strides=(2, 2), padding="same", activation='relu')))
+    model.add(TD(Conv2D(64, (5, 5), strides=(2, 2), padding="same", activation='relu')))
+    model.add(TD(Conv2D(128, (3, 3), strides=(2, 2), padding="same", activation='relu')))
+    model.add(TD(Conv2D(256, (3, 3), strides=(1, 1), padding="same", activation='relu')))
+    
+    model.add(TD(GlobalAveragePooling2D()))
+
+    model.add(LSTM(128, return_sequences=False, name="LSTM_fin"))
+    
+    model.add(Dense(128, activation='relu'))
+    model.add(Dense(self.action_size, activation='linear', name='model_outputs'))
+
+    adam = Adam(lr=self.learning_rate)
+    model.compile(loss="mse", optimizer=adam)
+
+    return model

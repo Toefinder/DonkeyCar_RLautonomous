@@ -29,21 +29,24 @@ import matplotlib.pyplot as plt # debug
 import math
 import datetime
 from imageprocess import detect_edge
-img_rows, img_cols = 80, 80
+from models import get_build_model_fn, get_initiate_state_fn, get_update_state_fn
+import types
+
+img_rows, img_cols = 80, 80 # rows is width and cols is height
 # Convert image into Black and white
 img_channels = 4  # We stack 4 frames
-
+num_outputs = 15
 
 class DQNAgent:
-    def __init__(self, state_size, action_space, train=True):
+    def __init__(self, state_size, action_space, train=True, model_name="baseline"):
         self.t = 0
         self.max_Q = 0
         self.train = train
 
         # Get size of state and action
-        self.state_size = state_size
+        self.state_size = state_size # (img_rows, img_cols, img_channels)
         self.action_space = action_space
-        self.action_size = action_space
+        self.action_size = num_outputs
 
         # These are hyper parameters for the DQN
         self.discount_factor = 0.99
@@ -63,63 +66,37 @@ class DQNAgent:
         self.memory = deque(maxlen=10000)
 
         # Create main model and target model
+        self.model_name = model_name
+        self.set_model_architecture(self.model_name) # choose the model architecture
         self.model = self.build_model()
         self.target_model = self.build_model()
 
         # Copy the model to target model
         # --> initialize the target model so that the parameters of model & target model to be same
         self.update_target_model()
+        
+    def set_model_architecture(self, model_name): 
+        model_fn = get_build_model_fn(model_name)
+        initiate_state_fn = get_initiate_state_fn(model_name)
+        update_state_fn = get_update_state_fn(model_name)
 
+        self.build_model = types.MethodType(model_fn, self)
+        self.initiate_state = types.MethodType(initiate_state_fn, self)
+        self.update_state = types.MethodType(update_state_fn, self)
     def build_model(self):
-        # model = Sequential()
-        # model.add(
-        #     Conv2D(24, (5, 5), strides=(2, 2), padding="same", input_shape=(img_rows, img_cols, img_channels))
-        # )  # 80*80*4
-        # model.add(Activation("relu"))
-        # model.add(Conv2D(32, (5, 5), strides=(2, 2), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(Conv2D(64, (5, 5), strides=(2, 2), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(Conv2D(64, (3, 3), strides=(2, 2), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(Conv2D(64, (3, 3), strides=(1, 1), padding="same"))
-        # model.add(Activation("relu"))
-        # model.add(Flatten())
-        # model.add(Dense(512))
-        # model.add(Activation("relu"))
+        pass
 
-        # # 15 categorical bins for Steering angles
-        # model.add(Dense(15, activation="linear"))
-
-        # adam = Adam(lr=self.learning_rate)
-        # model.compile(loss="mse", optimizer=adam)
-
-        model = Sequential()
-        model.add(
-            Conv2D(16, (5, 5), strides=(2, 2), padding="same", input_shape=(img_rows, img_cols, img_channels))
-        )  # 80*80*4
-        model.add(Activation("relu"))
-        model.add(Conv2D(32, (5, 5), strides=(2, 2), padding="same"))
-        model.add(Activation("relu"))
-        model.add(Conv2D(64, (5, 5), strides=(2, 2), padding="same"))
-        model.add(Activation("relu"))
-        model.add(Conv2D(128, (3, 3), strides=(2, 2), padding="same"))
-        model.add(Activation("relu"))
-        model.add(Conv2D(256, (3, 3), strides=(1, 1), padding="same"))
-        model.add(Activation("relu"))
-        
-        model.add(GlobalAveragePooling2D()) # replace the CNN model with a custom one
-        
-        model.add(Dense(128))
-        model.add(Activation("relu"))
-
-        # 15 categorical bins for Steering angles
-        model.add(Dense(15, activation="linear"))
-
-        adam = Adam(lr=self.learning_rate)
-        model.compile(loss="mse", optimizer=adam)
-
-        return model
+    def initiate_state(self, x_t):
+        """ 
+        initiate the state to the correct shape from initial x_t
+        """
+        pass
+    
+    def update_state(self, s_t, x_t1):
+        """ 
+        update the state to the correct shape from previous s_t and next observation x_t1
+        """
+        pass
 
     def rgb2gray(self, rgb):
         """
@@ -127,14 +104,6 @@ class DQNAgent:
         """
         return np.dot(rgb[..., :3], [0.299, 0.587, 0.114])
 
-    # def process_image(self, obs):
-    #     global LANE_SEGMENTATION 
-    #     obs = self.rgb2gray(obs)
-    #     obs = cv2.resize(obs, (img_rows, img_cols))
-
-
-    #     if LANE_SEGMENTATION: obs = detect_edge(obs)
-    #     return obs
     def process_image(self, obs):
         global LANE_SEGMENTATION 
         global KEEP_RATIO
@@ -331,12 +300,17 @@ def run_ddqn(args):
 
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     if DEBUG_MODE:
-        train_log_dir = 'logs/reward/debug/' + current_time 
+        train_log_dir = 'logs/reward/debug/' + current_time + args.model_name
     else:
-        train_log_dir = 'logs/reward/train/' + current_time 
+        train_log_dir = 'logs/reward/train/' + current_time + args.model_name
 
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
     
+    # record all the arguments
+    file = open(train_log_dir + "/args.txt", "w")
+    file.write(args.__str__())
+    file.close()
+
     # number of episodes
     EPISODES = args.eps 
     
@@ -392,15 +366,16 @@ def run_ddqn(args):
     action_space = env.action_space  # Steering and Throttle
 
     try:
-        agent = DQNAgent(state_size, action_space, train=not args.test)
+        agent = DQNAgent(state_size, action_space, train=not args.test, model_name=args.model_name)
 
         throttle = args.throttle  # Set throttle as constant value
 
         episodes = []
-
-        if os.path.exists(args.model):
+        # model_log_dir = "model/" + args.model_name + "/"
+        model_path = args.model
+        if os.path.exists(model_path):
             print("load the saved model")
-            agent.load_model(args.model)
+            agent.load_model(model_path)
 
         for e in range(EPISODES):
 
@@ -419,9 +394,8 @@ def run_ddqn(args):
             
             x_t = agent.process_image(obs)
 
-            s_t = np.stack((x_t, x_t, x_t, x_t), axis=2)
-            # In Keras, need to reshape
-            s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  # 1*80*80*4
+            s_t = agent.initiate_state(x_t)
+            # print(s_t.shape) # check that s_t is of shape 1*80*80*4
             
             
             while not done:
@@ -448,8 +422,7 @@ def run_ddqn(args):
                 # plt.imshow(agent.process_image(next_obs)) # debug
                 # plt.savefig("{}.png".format(agent.t)) # debug
 
-                x_t1 = x_t1.reshape(1, x_t1.shape[0], x_t1.shape[1], 1)  # 1x80x80x1
-                s_t1 = np.append(x_t1, s_t[:, :, :, :3], axis=3)  # 1x80x80x4
+                s_t1 = agent.update_state(s_t, x_t1)
 
                 # Save the sample <s, a, r, s'> to the replay memory
                 agent.replay_memory(s_t, np.argmax(linear_bin(steering)), reward, s_t1, done)
@@ -489,7 +462,7 @@ def run_ddqn(args):
 
                     # Save model for each episode
                     if agent.train:
-                        agent.save_model(args.model)
+                        agent.save_model(model_path)
 
                     print(
                         "episode:",
@@ -514,7 +487,7 @@ def run_ddqn(args):
                         tf.summary.scalar('episode average speed', episode_average_speed, step=e)
                         tf.summary.scalar('episode average cte', episode_average_cte, step=e)
         if agent.train:
-            agent.save_ready_model(args.model[:-3]+"_ready.h5")
+            agent.save_ready_model(model_path[:-3]+"_ready.h5")
     except KeyboardInterrupt:
         print("stopping run...")
     finally:
@@ -543,7 +516,7 @@ if __name__ == "__main__":
         default="manual",
         help="path to unity simulator. maybe be left at manual if you would like to start the sim on your own.",
     )
-    parser.add_argument("--model", type=str, default="model/rl_driver.h5", help="path to model")
+    parser.add_argument("--model", type=str, default="rl_driver.h5", help="name of the model file")
     parser.add_argument("--test", action="store_true", help="agent uses learned model to navigate env")
     parser.add_argument("--port", type=int, default=9091, help="port to use for websockets")
     parser.add_argument("--throttle", type=float, default=0.3, help="constant throttle for driving")
@@ -552,11 +525,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--gpu", type=int, default=0, help="name of GPU to use")
     parser.add_argument("--debug_mode", type=int, default=0, help="debug mode")
-    parser.add_argument("--eps", type=int, default=10000, help="number of episodes to train for")
+    parser.add_argument("--eps", type=int, default=500, help="number of episodes to train for")
     parser.add_argument("--max_ep_len", type=int, default=2000, help="maximum length per episode") 
     parser.add_argument("--lane_segment", type=int, default=0, help="whether to perform lane segmentation") 
     parser.add_argument("--keep_ratio", type=int, default=0, help="whether to keep the image aspect ratio by padding before resizing") 
     parser.add_argument("--image_rescale", type=int, default=0, help="whether to rescale the image pixels before feeding it into the CNN") 
+    parser.add_argument("--model_name", type=str, default="baseline", help="name of the model architecture to use") 
     args = parser.parse_args()
     
 
