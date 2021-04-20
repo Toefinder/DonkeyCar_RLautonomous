@@ -32,7 +32,7 @@ from imageprocess import detect_edge
 from models import get_build_model_fn, get_initiate_state_fn, get_update_state_fn
 import types
 
-img_rows, img_cols = 80, 80 # rows is heights and cols is width
+
 # Convert image into Black and white
 # img_channels = 4  # Number of frames
 num_outputs = 15
@@ -44,8 +44,12 @@ class DQNAgent:
         self.train = train
 
         # Get size of state and action
-        self.state_size = state_size # (img_rows, img_cols, img_channels)
-        self.color_channels = 1
+        self.state_size = state_size # (img_rows, img_cols, color_channels, img_channels)
+        self.img_rows = self.state_size[0]
+        self.img_cols = self.state_size[1]
+        self.color_channels = self.state_size[2]
+        self.img_channels = self.state_size[3]
+
         self.action_space = action_space
         self.action_size = num_outputs
 
@@ -113,12 +117,14 @@ class DQNAgent:
             top = obs.shape[1] - obs.shape[0]
             obs = cv2.copyMakeBorder(obs, top, 0, 0, 0, cv2.BORDER_REPLICATE)
         
-        obs = cv2.resize(obs, (img_cols, img_rows))
+        obs = cv2.resize(obs, (self.img_cols, self.img_rows))
         if LANE_SEGMENTATION: 
-            obs = detect_edge(obs)
+            obs = detect_edge(obs) # the image will be of shape (self.img_cols, self.img_rows)
+        elif self.color_channels == 3:
+            pass # the image will be of shape (self.img_cols, self.img_rows, 3)
         else:
-            obs = self.rgb2gray(obs)
-        
+            obs = self.rgb2gray(obs) # the image will be of shape (self.img_cols, self.img_rows)
+
         if IMAGE_RESCALE:
             obs = obs/255.0
             
@@ -329,7 +335,7 @@ def run_ddqn(args):
     global IMAGE_RESCALE
     IMAGE_RESCALE = args.image_rescale
 
-    img_channels = args.img_channels
+    
 
     conf = {
         "exe_path": args.sim,
@@ -364,7 +370,10 @@ def run_ddqn(args):
     signal.signal(signal.SIGABRT, signal_handler)
 
     # Get size of state and action from environment
-    state_size = (img_rows, img_cols, img_channels)
+    img_rows, img_cols = args.img_size, args.img_size # rows is heights and cols is width. this case we use square images
+    img_channels = args.img_channels
+    color_channels = args.color_channels
+    state_size = (img_rows, img_cols, color_channels, img_channels)
     action_space = env.action_space  # Steering and Throttle
 
     try:
@@ -528,13 +537,14 @@ if __name__ == "__main__":
     parser.add_argument("--gpu", type=int, default=0, help="name of GPU to use")
     parser.add_argument("--debug_mode", type=int, default=0, help="debug mode")
     parser.add_argument("--eps", type=int, default=500, help="number of episodes to train for")
-    parser.add_argument("--max_ep_len", type=int, default=2000, help="maximum length per episode") 
+    parser.add_argument("--max_ep_len", type=int, default=1000, help="maximum length per episode") 
     parser.add_argument("--lane_segment", type=int, default=0, help="whether to perform lane segmentation") 
     parser.add_argument("--keep_ratio", type=int, default=0, help="whether to keep the image aspect ratio by padding before resizing") 
     parser.add_argument("--image_rescale", type=int, default=0, help="whether to rescale the image pixels before feeding it into the CNN") 
     parser.add_argument("--model_name", type=str, default="baseline", help="name of the model architecture to use") 
     parser.add_argument("--img_channels", type=int, default=4, help="number of image frames to stack")
-    
+    parser.add_argument("--color_channels", type=int, default=1, help="number of colors in each image, can be either 1 or 3")
+    parser.add_argument("--img_size", type=int, default=80, help="size of square image")
     args = parser.parse_args()
     
 
