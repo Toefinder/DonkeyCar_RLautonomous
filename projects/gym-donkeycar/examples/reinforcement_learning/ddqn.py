@@ -32,9 +32,9 @@ from imageprocess import detect_edge
 from models import get_build_model_fn, get_initiate_state_fn, get_update_state_fn
 import types
 
-img_rows, img_cols = 80, 80 # rows is width and cols is height
+img_rows, img_cols = 80, 80 # rows is heights and cols is width
 # Convert image into Black and white
-img_channels = 4  # We stack 4 frames
+# img_channels = 4  # Number of frames
 num_outputs = 15
 
 class DQNAgent:
@@ -45,6 +45,7 @@ class DQNAgent:
 
         # Get size of state and action
         self.state_size = state_size # (img_rows, img_cols, img_channels)
+        self.color_channels = 1
         self.action_space = action_space
         self.action_size = num_outputs
 
@@ -112,7 +113,7 @@ class DQNAgent:
             top = obs.shape[1] - obs.shape[0]
             obs = cv2.copyMakeBorder(obs, top, 0, 0, 0, cv2.BORDER_REPLICATE)
         
-        obs = cv2.resize(obs, (img_rows, img_cols))
+        obs = cv2.resize(obs, (img_cols, img_rows))
         if LANE_SEGMENTATION: 
             obs = detect_edge(obs)
         else:
@@ -327,7 +328,8 @@ def run_ddqn(args):
     KEEP_RATIO = args.keep_ratio
     global IMAGE_RESCALE
     IMAGE_RESCALE = args.image_rescale
-    
+
+    img_channels = args.img_channels
 
     conf = {
         "exe_path": args.sim,
@@ -531,6 +533,8 @@ if __name__ == "__main__":
     parser.add_argument("--keep_ratio", type=int, default=0, help="whether to keep the image aspect ratio by padding before resizing") 
     parser.add_argument("--image_rescale", type=int, default=0, help="whether to rescale the image pixels before feeding it into the CNN") 
     parser.add_argument("--model_name", type=str, default="baseline", help="name of the model architecture to use") 
+    parser.add_argument("--img_channels", type=int, default=4, help="number of image frames to stack")
+    
     args = parser.parse_args()
     
 
