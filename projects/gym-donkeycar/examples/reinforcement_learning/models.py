@@ -8,10 +8,12 @@ from tensorflow.keras.layers import TimeDistributed as TD
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.applications import MobileNetV2, mobilenet_v2
+from tensorflow import reshape as tf_reshape
+
 import numpy as np
 
 ## DDQN_LSTM_edit1
-def get_build_model_fn(model_name):
+def get_build_model_fn(model_name, agent):
     "return functions to build_model(), to properly format_input() state"
     ##### Baseline CNN model
     if model_name == "baseline":
@@ -24,14 +26,27 @@ def get_build_model_fn(model_name):
     elif model_name == "cnnedit1_lstm":
         return build_model_cnnedit1_lstm
 
+    elif model_name == "cnnedit1_lstm_reorder":
+        return build_model_cnnedit1_lstm
+
     elif model_name == "cnnedit2":
         return build_model_cnnedit2
     
     elif model_name == "transfer_mobilenetv2":
+         # feature extractor
+        agent.feature_extractor = MobileNetV2(weights="imagenet", include_top=False, input_shape=(96, 96, 3))
+        agent.feature_extractor.train = False # use this just to extract features. no training 
         return build_model_transfer_mobilenetv2
+    elif model_name == "transfer_mobilenetv2_lstm":
+        agent.feature_extractor = MobileNetV2(weights="imagenet", include_top=False, input_shape=(96, 96, 3))
+        agent.feature_extractor.train = False # use this just to extract features. no training 
+        return build_model_transfer_mobilenetv2_lstm
 
 def get_initiate_state_fn(model_name):
     if model_name in ["cnnedit1_lstm"]:
+        return initiate_state_lstm
+
+    elif model_name in ["cnnedit1_lstm_reorder"]:
         return initiate_state_lstm
 
     elif model_name in ["cnnedit2"]:
@@ -40,18 +55,25 @@ def get_initiate_state_fn(model_name):
     elif model_name in ["transfer_mobilenetv2"]:
         return initiate_state_transfer_mobilenetv2
     
+    elif model_name in ["transfer_mobilenetv2_lstm"]:
+        return initiate_state_transfer_mobilenetv2_lstm
+    
     else:
         return initiate_state_cnn
 
 def get_update_state_fn(model_name):
     if model_name in ["cnnedit1_lstm"]:
         return update_state_lstm
-
+    elif model_name in ["cnnedit1_lstm_reorder"]:
+        return update_state_lstm_reorder
     elif model_name in ["cnnedit2"]:
         return update_state_cnn_stackvertical
 
     elif model_name in ["transfer_mobilenetv2"]:
         return update_state_transfer_mobilenetv2
+
+    elif model_name in ["transfer_mobilenetv2_lstm"]:
+        return update_state_transfer_mobilenetv2_lstm
 
     else:
         return update_state_cnn
@@ -98,6 +120,18 @@ def initiate_state_transfer_mobilenetv2(self, x_t):
     # print(s_t.shape) # debug
     return s_t
 
+def initiate_state_transfer_mobilenetv2_lstm(self, x_t):
+    if len(x_t.shape) < 3:
+        x_t = np.stack((x_t, )*3, axis=2)
+    img_channels = self.img_channels
+    x_t = x_t.reshape(1, x_t.shape[0], x_t.shape[1], x_t.shape[2])
+    x_t = mobilenet_v2.preprocess_input(x_t)
+    x_t = self.feature_extractor(x_t)
+
+    s_t = np.stack((x_t,) * img_channels, axis=1)
+    # print(s_t.shape) # debug
+    return s_t
+
 ################# update_state functions #################
 def update_state_cnn(self, s_t, x_t1):
     img_channels = self.img_channels
@@ -113,6 +147,14 @@ def update_state_lstm(self, s_t, x_t1):
 
     x_t1 = x_t1.reshape(1, 1, x_t1.shape[0], x_t1.shape[1], color_channels)  # 1x1x80x80x(num_color)
     s_t1 = np.append(x_t1, s_t[:, :(img_channels-1), :, :], axis=1)  # 1x4x80x80x(num_color)
+    return s_t1
+
+def update_state_lstm_reorder(self, s_t, x_t1):
+    # img_channels = self.img_channels
+    color_channels = self.color_channels       
+
+    x_t1 = x_t1.reshape(1, 1, x_t1.shape[0], x_t1.shape[1], color_channels)  # 1x1x80x80x(num_color)
+    s_t1 = np.append(s_t[:, 1:, :, :], x_t1, axis=1)  # 1x4x80x80x(num_color)
     return s_t1
 
 def update_state_cnn_stackvertical(self, s_t, x_t1):
@@ -138,6 +180,21 @@ def update_state_transfer_mobilenetv2(self, s_t, x_t1):
     x_t1 = self.feature_extractor(x_t1) # (1, 3, 3, 1280)
 
     s_t1 = np.append(x_t1, s_t[:, :, :, :((img_channels-1)*(x_t1.shape[3]))], axis=3) # (1, 3, 3, 5120)  
+    # print(s_t1.shape) # debug
+    return s_t1
+
+def update_state_transfer_mobilenetv2_lstm(self, s_t, x_t1):
+    img_channels = self.img_channels
+
+    if len(x_t1.shape) < 3:
+        x_t1 = np.stack((x_t1, )*3, axis=2)
+    
+    x_t1 = x_t1.reshape(1, x_t1.shape[0], x_t1.shape[1], x_t1.shape[2])
+    x_t1 = mobilenet_v2.preprocess_input(x_t1)
+    x_t1 = self.feature_extractor(x_t1) # (1, 3, 3, 1280)
+
+    x_t1 = tf_reshape(x_t1, (1, x_t1.shape[0], x_t1.shape[1], x_t1.shape[2], x_t1.shape[3]))  # (1, 1, 3, 3, 1280)
+    s_t1 = np.append(s_t[:, 1:, :, :, :], x_t1, axis=1)  # (1, 4, 3, 3, 1280)
     # print(s_t1.shape) # debug
     return s_t1
 ################# build_model functions #################
@@ -241,14 +298,12 @@ def build_model_cnnedit2(self):
     return model
 
 def build_model_transfer_mobilenetv2(self):
-    # feature extractor
-    self.feature_extractor = MobileNetV2(weights="imagenet", include_top=False, input_shape=(96, 96, 3))
+   
     if self.img_cols != 96:
         self.img_cols = 96
     if self.img_rows != 96:
         self.img_rows = 96
 
-    self.feature_extractor.train = False # use this just to extract features. no training 
 
     img_channels = self.img_channels
 
@@ -259,7 +314,30 @@ def build_model_transfer_mobilenetv2(self):
     model.add(Dense(128, activation="relu"))
     
     # 15 categorical bins for Steering angles
-    model.add(Dense(15, activation="linear"))
+    model.add(Dense(self.action_size, activation="linear"))
+
+    adam = Adam(lr=self.learning_rate)
+    model.compile(loss="mse", optimizer=adam)
+
+    return model
+
+def build_model_transfer_mobilenetv2_lstm(self):
+    if self.img_cols != 96:
+        self.img_cols = 96
+    if self.img_rows != 96:
+        self.img_rows = 96
+    
+    img_channels = self.img_channels
+
+    model = Sequential()
+    model.add(Input(shape=(img_channels, 3, 3, 1280), name='features_in')) # 4*80*80
+    
+    model.add(TD(GlobalAveragePooling2D()))
+
+    model.add(LSTM(128, return_sequences=False, name="LSTM_fin"))
+        
+    model.add(Dense(128, activation='relu'))
+    model.add(Dense(self.action_size, activation='linear', name='model_outputs'))
 
     adam = Adam(lr=self.learning_rate)
     model.compile(loss="mse", optimizer=adam)

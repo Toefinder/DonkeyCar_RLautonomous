@@ -81,7 +81,7 @@ class DQNAgent:
         self.update_target_model()
         
     def set_model_architecture(self, model_name): 
-        model_fn = get_build_model_fn(model_name)
+        model_fn = get_build_model_fn(model_name, agent=self)
         initiate_state_fn = get_initiate_state_fn(model_name)
         update_state_fn = get_update_state_fn(model_name)
 
@@ -117,7 +117,7 @@ class DQNAgent:
             top = obs.shape[1] - obs.shape[0]
             obs = cv2.copyMakeBorder(obs, top, 0, 0, 0, cv2.BORDER_REPLICATE)
         
-        obs = cv2.resize(obs, (self.img_cols, self.img_rows))
+        obs = cv2.resize(obs, (self.img_cols, self.img_rows)) # note that mobilenetv2 need (96,96,3)
         if LANE_SEGMENTATION: 
             obs = detect_edge(obs) # the image will be of shape (self.img_cols, self.img_rows)
         elif self.color_channels == 3:
