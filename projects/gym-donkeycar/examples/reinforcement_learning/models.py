@@ -41,6 +41,9 @@ def get_build_model_fn(model_name, agent):
         agent.feature_extractor = MobileNetV2(weights="imagenet", include_top=False, input_shape=(96, 96, 3))
         agent.feature_extractor.train = False # use this just to extract features. no training 
         return build_model_transfer_mobilenetv2_lstm
+    
+    elif model_name == "cnnedit3":
+        return build_model_cnnedit3
 
 def get_initiate_state_fn(model_name):
     if model_name in ["cnnedit1_lstm"]:
@@ -57,7 +60,10 @@ def get_initiate_state_fn(model_name):
     
     elif model_name in ["transfer_mobilenetv2_lstm"]:
         return initiate_state_transfer_mobilenetv2_lstm
-    
+
+    elif model_name in ["cnnedit3"]:
+        return initiate_state_lstm
+
     else:
         return initiate_state_cnn
 
@@ -74,6 +80,9 @@ def get_update_state_fn(model_name):
 
     elif model_name in ["transfer_mobilenetv2_lstm"]:
         return update_state_transfer_mobilenetv2_lstm
+
+    elif model_name in ["cnnedit3"]:
+        return update_state_lstm_reorder
 
     else:
         return update_state_cnn
@@ -184,7 +193,7 @@ def update_state_transfer_mobilenetv2(self, s_t, x_t1):
     return s_t1
 
 def update_state_transfer_mobilenetv2_lstm(self, s_t, x_t1):
-    img_channels = self.img_channels
+    # img_channels = self.img_channels
 
     if len(x_t1.shape) < 3:
         x_t1 = np.stack((x_t1, )*3, axis=2)
@@ -342,4 +351,31 @@ def build_model_transfer_mobilenetv2_lstm(self):
     adam = Adam(lr=self.learning_rate)
     model.compile(loss="mse", optimizer=adam)
 
+    return model
+
+def build_model_cnnedit3(self):
+
+    img_channels = self.img_channels
+    img_rows = self.img_rows
+    img_cols = self.img_cols
+    color_channels = self.color_channels
+
+    model = Sequential()
+    model.add(Input(shape = (img_channels, img_rows, img_cols, color_channels), name="img_in")) # (batchsize, 4, 80, 80, 1)
+    model.add(TD(Conv2D(16, (5, 5), strides=(2, 2), padding="same", activation='relu')))  
+    model.add(TD(Conv2D(32, (5, 5), strides=(2, 2), padding="same", activation='relu')))
+    model.add(TD(Conv2D(64, (5, 5), strides=(2, 2), padding="same", activation='relu')))
+    model.add(TD(Conv2D(128, (3, 3), strides=(2, 2), padding="same", activation='relu')))
+    model.add(TD(Conv2D(256, (3, 3), strides=(1, 1), padding="same", activation='relu')))
+
+    model.add(TD(GlobalAveragePooling2D())) # replace the CNN model with a custom one
+    model.add(Flatten())
+    model.add(Dense(128, activation='relu'))
+
+    # 15 categorical bins for Steering angles
+    model.add(Dense(self.action_size, activation="linear"))
+
+    adam = Adam(lr=self.learning_rate)
+    model.compile(loss="mse", optimizer=adam)
+    
     return model
