@@ -1,6 +1,6 @@
 from tensorflow.keras.layers import Activation, Conv2D, Dense, Flatten, GlobalAveragePooling2D, Conv3D
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Input
+from tensorflow.keras.layers import Input, GlobalAveragePooling3D
 from tensorflow.keras.layers import MaxPooling2D
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import LSTM
@@ -402,8 +402,7 @@ def build_model_cnnedit4(self):
     model.add(Conv3D(128, (1, 3, 3), strides=(1, 2, 2), padding="same", activation='relu'))
     model.add(Conv3D(256, (1, 3, 3), strides=(1, 1, 1), padding="same", activation='relu'))
 
-    model.add(TD(GlobalAveragePooling2D()))
-    model.add(Flatten())
+    model.add(GlobalAveragePooling3D())
     model.add(Dense(128, activation='relu'))
     model.add(Dense(self.action_size, activation='linear', name='model_outputs'))
 
