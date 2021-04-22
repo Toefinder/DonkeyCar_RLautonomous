@@ -1,4 +1,4 @@
-from tensorflow.keras.layers import Activation, Conv2D, Dense, Flatten, GlobalAveragePooling2D
+from tensorflow.keras.layers import Activation, Conv2D, Dense, Flatten, GlobalAveragePooling2D, Conv3D
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Input
 from tensorflow.keras.layers import MaxPooling2D
@@ -45,6 +45,12 @@ def get_build_model_fn(model_name, agent):
     elif model_name == "cnnedit3":
         return build_model_cnnedit3
 
+    elif model_name == "cnnedit4":
+        return build_model_cnnedit4
+
+    elif model_name == "cnnedit4_lstm":
+        return build_model_cnnedit4_lstm
+
 def get_initiate_state_fn(model_name):
     if model_name in ["cnnedit1_lstm"]:
         return initiate_state_lstm
@@ -61,7 +67,7 @@ def get_initiate_state_fn(model_name):
     elif model_name in ["transfer_mobilenetv2_lstm"]:
         return initiate_state_transfer_mobilenetv2_lstm
 
-    elif model_name in ["cnnedit3"]:
+    elif model_name in ["cnnedit3", "cnnedit4", "cnnedit4_lstm"]:
         return initiate_state_lstm
 
     else:
@@ -81,7 +87,7 @@ def get_update_state_fn(model_name):
     elif model_name in ["transfer_mobilenetv2_lstm"]:
         return update_state_transfer_mobilenetv2_lstm
 
-    elif model_name in ["cnnedit3"]:
+    elif model_name in ["cnnedit3", "cnnedit4", "cnnedit4_lstm"]:
         return update_state_lstm_reorder
 
     else:
@@ -378,4 +384,58 @@ def build_model_cnnedit3(self):
     adam = Adam(lr=self.learning_rate)
     model.compile(loss="mse", optimizer=adam)
     
+    return model
+
+def build_model_cnnedit4(self):
+    img_channels = self.img_channels
+    img_rows = self.img_rows
+    img_cols = self.img_cols
+    color_channels = self.color_channels
+    
+    img_seq_shape = (img_channels, img_rows, img_cols, color_channels)
+
+    model = Sequential()
+    model.add(Input(shape=img_seq_shape, name='img_in')) # 4*80*80*1
+    model.add(Conv3D(16, (3, 5, 5), strides=(1, 2, 2), padding="same", activation='relu'))
+    model.add(Conv3D(32, (3, 5, 5), strides=(1, 2, 2), padding="same", activation='relu'))
+    model.add(Conv3D(64, (1, 5, 5), strides=(1, 2, 2), padding="same", activation='relu'))
+    model.add(Conv3D(128, (1, 3, 3), strides=(1, 2, 2), padding="same", activation='relu'))
+    model.add(Conv3D(256, (1, 3, 3), strides=(1, 1, 1), padding="same", activation='relu'))
+
+    model.add(TD(GlobalAveragePooling2D()))
+    model.add(Flatten())
+    model.add(Dense(128, activation='relu'))
+    model.add(Dense(self.action_size, activation='linear', name='model_outputs'))
+
+    adam = Adam(lr=self.learning_rate)
+    model.compile(loss="mse", optimizer=adam)
+
+
+    return model
+
+def build_model_cnnedit4_lstm(self):
+    img_channels = self.img_channels
+    img_rows = self.img_rows
+    img_cols = self.img_cols
+    color_channels = self.color_channels
+
+    img_seq_shape = (img_channels, img_rows, img_cols, color_channels)
+
+    model = Sequential()
+    model.add(Input(shape=img_seq_shape, name='img_in')) # 4*80*80*1
+    model.add(Conv3D(16, (3, 5, 5), strides=(1, 2, 2), padding="same", activation='relu'))
+    model.add(Conv3D(32, (3, 5, 5), strides=(1, 2, 2), padding="same", activation='relu'))
+    model.add(Conv3D(64, (1, 5, 5), strides=(1, 2, 2), padding="same", activation='relu'))
+    model.add(Conv3D(128, (1, 3, 3), strides=(1, 2, 2), padding="same", activation='relu'))
+    model.add(Conv3D(256, (1, 3, 3), strides=(1, 1, 1), padding="same", activation='relu'))
+
+    model.add(TD(GlobalAveragePooling2D()))
+    model.add(LSTM(128, return_sequences=False, name="LSTM_fin"))
+    model.add(Dense(128, activation='relu'))
+    model.add(Dense(self.action_size, activation='linear', name='model_outputs'))
+
+    adam = Adam(lr=self.learning_rate)
+    model.compile(loss="mse", optimizer=adam)
+
+
     return model
