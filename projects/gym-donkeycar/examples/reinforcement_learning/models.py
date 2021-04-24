@@ -217,8 +217,12 @@ def build_model_cnnbaseline(self):
     """
         The baseline CNN model. Note that self.state_size is (img_rows, img_cols_img_channels)
     """
+    img_cols = self.img_cols
+    img_rows = self.img_rows
+    img_channels = self.img_channels
+
     model = Sequential()
-    model.add(Conv2D(24, (5, 5), strides=(2, 2), padding="same", input_shape=self.state_size, activation='relu'))  # 80*80*4
+    model.add(Conv2D(24, (5, 5), strides=(2, 2), padding="same", input_shape=(img_rows, img_cols, img_channels), activation='relu'))  # 80*80*4
     model.add(Conv2D(32, (5, 5), strides=(2, 2), padding="same", activation='relu'))
     model.add(Conv2D(64, (5, 5), strides=(2, 2), padding="same", activation='relu'))
     model.add(Conv2D(64, (3, 3), strides=(2, 2), padding="same", activation='relu'))
@@ -240,8 +244,12 @@ def build_model_cnnedit1(self):
     """
         The CNN model with some edits 
     """
+    img_cols = self.img_cols
+    img_rows = self.img_rows
+    img_channels = self.img_channels
+
     model = Sequential()
-    model.add(Conv2D(16, (5, 5), strides=(2, 2), padding="same", input_shape=self.state_size, activation='relu'))  # 80*80*4
+    model.add(Conv2D(16, (5, 5), strides=(2, 2), padding="same", input_shape=(img_rows, img_cols, img_channels), activation='relu'))  # 80*80*4
     model.add(Conv2D(32, (5, 5), strides=(2, 2), padding="same", activation='relu'))
     model.add(Conv2D(64, (5, 5), strides=(2, 2), padding="same", activation='relu'))
     model.add(Conv2D(128, (3, 3), strides=(2, 2), padding="same", activation='relu'))

@@ -310,7 +310,11 @@ def run_ddqn(args):
         train_log_dir = 'logs/reward/debug/' + current_time + args.model_name
     else:
         train_log_dir = 'logs/reward/train/' + current_time + args.model_name
-
+    if args.test: 
+        if args.env_name == "donkey-generated-track-v0":
+            train_log_dir = 'logs/reward/test/' + current_time + args.model_name + "_{}lane".format(args.lane_segment) + "_same"
+        else:
+            train_log_dir = 'logs/reward/test/' + current_time + args.model_name + "_{}lane".format(args.lane_segment) + "_otherenv"
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
     
     # record all the arguments
