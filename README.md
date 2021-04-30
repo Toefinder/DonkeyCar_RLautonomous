@@ -1,17 +1,17 @@
-# Implementation of paper titled "Performance of Deep Reinforcement Learning Models in End-to-End Autonomous Driving"\
-Experiments are conducted on Donkey Car Simulator. The code is mainly adapted from gym-donkeycar example code. \
+# Implementation of paper titled "Performance of Deep Reinforcement Learning Models in End-to-End Autonomous Driving"
+Experiments are conducted on Donkey Car Simulator. The code is mainly adapted from gym-donkeycar example code.\
 
 Mentor: Mr Mo Xiaoyu\
-References: https://github.com/tawnkramer/gym-donkeycar/tree/master/examples/reinforcement_learning \
+References: https://github.com/tawnkramer/gym-donkeycar/tree/master/examples/reinforcement_learning 
 
 ## Structure of the folder:
-/projects/gym-donkeycar/examples/reinforcement_learning: folder containing all the code edited by me \
+/projects/gym-donkeycar/examples/reinforcement_learning: folder containing all the code edited by me\
 
 Important files in this folder: \
-&nbsp;&nbsp;&nbsp;ddqn.py: the main file used to run all models, but note that it fixes the throttle and only allows steering to be controlled \ 
-&nbsp;&nbsp;&nbsp;models.py: build models that is used by ddqn.py \ 
-&nbsp;&nbsp;&nbsp;ddqn_throttle.py: attempt to use the same algorithm to control both steering and throttle \ 
-&nbsp;&nbsp;&nbsp;imageprocess.py: contains code for edge detection \ 
+&nbsp;&nbsp;&nbsp;ddqn.py: the main file used to run all models, but note that it fixes the throttle and only allows steering to be controlled\ 
+&nbsp;&nbsp;&nbsp;models.py: build models that is used by ddqn.py\ 
+&nbsp;&nbsp;&nbsp;ddqn_throttle.py: attempt to use the same algorithm to control both steering and throttle\ 
+&nbsp;&nbsp;&nbsp;imageprocess.py: contains code for edge detection\ 
   
 &nbsp;&nbsp;&nbsp;ppo_train.py: not written and not used by me 
 
