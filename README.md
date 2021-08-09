@@ -23,7 +23,7 @@ It is best to run the experiments in background with nohup on a Linux machine.
 ### Running the experiments 
 First, cd to /projects
 
-To run Exact Non-federated Shapley for 5 users, for case 1 (equal distribution with same size), and 10 global epochs:     
+To run training:     
 ```nohup python gym-donkeycar/examples/reinforcement_learning/ddqn.py --gpu 0 --eps 500 --model "model/transferlearning_mobilenetv2_lstm_nolanesegment_4frame_run1.h5" --debug_mode=0 --max_ep_len=1000 --port 9080 --lane_segment=0 --keep_ratio=0  --model_name="transfer_mobilenetv2_lstm"  --img_channels=4 --img_size=96 --color_channels=3 > transfer_mobilenetv2_lstm_nolanesegment_4frame_run1.out & ```
 
 ## Options 
