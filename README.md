@@ -24,7 +24,10 @@ It is best to run the experiments in background with nohup on a Linux machine.
 First, cd to /projects
 
 To run training:     
-```nohup python gym-donkeycar/examples/reinforcement_learning/ddqn.py --gpu 0 --eps 500 --model "model/transferlearning_mobilenetv2_lstm_nolanesegment_4frame_run1.h5" --debug_mode=0 --max_ep_len=1000 --port 9080 --lane_segment=0 --keep_ratio=0  --model_name="transfer_mobilenetv2_lstm"  --img_channels=4 --img_size=96 --color_channels=3 > transfer_mobilenetv2_lstm_nolanesegment_4frame_run1.out & ```
+
+``` shell
+python gym-donkeycar/examples/reinforcement_learning/ddqn.py --gpu 0 --eps 500 --model "model/transferlearning_mobilenetv2_lstm_nolanesegment_4frame_run1.h5" --debug_mode=0 --max_ep_len=1000 --port 9080 --lane_segment=0 --keep_ratio=0  --model_name="transfer_mobilenetv2_lstm"  --img_channels=4 --img_size=96 --color_channels=3 > transfer_mobilenetv2_lstm_nolanesegment_4frame_run1.out 
+```
 
 ## Options 
 "--model", type=str, default="rl_driver.h5", help="name of the model file"   
